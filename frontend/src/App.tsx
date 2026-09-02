@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -729,14 +729,59 @@ function ClassroomsPage({ institutionId }: { institutionId: string }) {
 
 // ---------------------------------------------------------------- calendar
 
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/** Monday-first 6x7 grid covering the whole month, padded with the trailing
+ * days of the previous/next month so every row is full — a fixed week
+ * start keeps the grid simple across all three languages rather than
+ * following each locale's actual first-day-of-week convention. */
+function buildMonthGrid(monthCursor: Date): Date[] {
+  const first = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
+  const startOffset = (first.getDay() + 6) % 7; // Monday = 0
+  const start = new Date(first);
+  start.setDate(first.getDate() - startOffset);
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+
 function CalendarPage() {
   const { t, lang } = useLang();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [monthCursor, setMonthCursor] = useState(() => new Date());
+  const [selected, setSelected] = useState(() => new Date());
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const locale = lang === "ar" ? "ar-DZ" : lang === "en" ? "en-CA" : "fr-CA";
   const load = () => request<CalendarEvent[]>("/calendar-events").then(setEvents);
   useEffect(() => { void load(); }, []);
+
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    for (const event of events) {
+      const key = dayKey(new Date(event.start_at));
+      map.set(key, [...(map.get(key) ?? []), event]);
+    }
+    return map;
+  }, [events]);
+
+  const today = new Date();
+  const days = useMemo(() => buildMonthGrid(monthCursor), [monthCursor]);
+  const selectedEvents = (eventsByDay.get(dayKey(selected)) ?? []).slice().sort((a, b) => a.start_at.localeCompare(b.start_at));
+
+  function changeMonth(delta: number) {
+    setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
+  }
+
+  function goToday() {
+    const now = new Date();
+    setMonthCursor(now);
+    setSelected(now);
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -759,17 +804,41 @@ function CalendarPage() {
     }
   }
 
+  async function remove(eventId: string) {
+    await request(`/calendar-events/${eventId}`, { method: "DELETE" });
+    void load();
+  }
+
+  const defaultStartAt = (() => {
+    const d = new Date(selected);
+    d.setHours(9, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  })();
+
   return (
     <div className="page">
       <div className="page-head">
         <h1>{t("Calendrier")}</h1>
         <button type="button" className="button" onClick={() => setShowForm((v) => !v)}>{t("Nouvel événement")}</button>
       </div>
+
+      <div className="calendar-toolbar">
+        <div className="calendar-nav">
+          <button type="button" className="button secondary small" onClick={() => changeMonth(-1)} aria-label={t("Mois précédent")}>‹</button>
+          <button type="button" className="button secondary small" onClick={goToday}>{t("Aujourd’hui")}</button>
+          <button type="button" className="button secondary small" onClick={() => changeMonth(1)} aria-label={t("Mois suivant")}>›</button>
+        </div>
+        <strong className="calendar-month-label">
+          {monthCursor.toLocaleDateString(locale, { month: "long", year: "numeric" })}
+        </strong>
+      </div>
+
       {showForm && (
         <form className="panel inline-form" onSubmit={submit}>
           <label>{t("Titre")}<input name="title" required /></label>
           <label>{t("Description")}<textarea name="description" /></label>
-          <label>{t("Date et heure de début")}<input name="start_at" type="datetime-local" required /></label>
+          <label>{t("Date et heure de début")}<input name="start_at" type="datetime-local" defaultValue={defaultStartAt} required /></label>
           <label className="check"><input name="all_day" type="checkbox" /> {t("Toute la journée")}</label>
           <div className="form-actions">
             <button type="button" className="button secondary" onClick={() => setShowForm(false)}>{t("Annuler")}</button>
@@ -777,15 +846,46 @@ function CalendarPage() {
           </div>
         </form>
       )}
+
+      <div className="calendar-grid">
+        {Array.from({ length: 7 }, (_, i) => {
+          const sample = new Date(2024, 0, 1 + i); // a known Monday-start week, for weekday labels only
+          return <div className="calendar-weekday" key={i}>{sample.toLocaleDateString(locale, { weekday: "short" })}</div>;
+        })}
+        {days.map((day) => {
+          const inMonth = day.getMonth() === monthCursor.getMonth();
+          const isToday = dayKey(day) === dayKey(today);
+          const isSelected = dayKey(day) === dayKey(selected);
+          const dayEvents = eventsByDay.get(dayKey(day)) ?? [];
+          return (
+            <button
+              type="button"
+              key={day.toISOString()}
+              className={["calendar-cell", !inMonth && "dim", isToday && "today", isSelected && "selected"].filter(Boolean).join(" ")}
+              onClick={() => setSelected(day)}
+            >
+              <span className="calendar-cell-num">{day.getDate()}</span>
+              {dayEvents.length > 0 && <span className="calendar-cell-dots">{dayEvents.slice(0, 3).map((e) => <i key={e.id} />)}</span>}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="event-list">
-        {events.map((event) => (
+        <h2 className="calendar-selected-label">
+          {selected.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}
+        </h2>
+        {selectedEvents.map((event) => (
           <div className="panel event-row" key={event.id}>
-            <strong>{event.title}</strong>
-            <small>{new Date(event.start_at).toLocaleString(locale)}</small>
+            <div className="event-row-head">
+              <strong>{event.title}</strong>
+              <button type="button" className="text-link" onClick={() => remove(event.id)}>{t("Supprimer")}</button>
+            </div>
+            <small>{event.all_day ? t("Toute la journée") : new Date(event.start_at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</small>
             {event.description && <p>{event.description}</p>}
           </div>
         ))}
-        {!events.length && <p className="empty">{t("Aucun événement pour l’instant.")}</p>}
+        {!selectedEvents.length && <p className="empty">{t("Aucun événement ce jour.")}</p>}
       </div>
     </div>
   );
