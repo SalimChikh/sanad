@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: sanad-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: ALLOW_DEMO_AUTH
+        value: "true"
+      - key: CORS_ORIGINS
+        value: "https://sanad-app-dz.web.app,https://sanad-app-dz.firebaseapp.com"

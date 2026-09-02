@@ -6,3 +6,5 @@ __pycache__/
 .env
 .env.local
 backend/uploads/
+.firebase/
+frontend/.env.production
