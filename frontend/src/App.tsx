@@ -83,6 +83,15 @@ function Auth({ register = false }: { register?: boolean }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Demo mode (no Firebase project wired up yet): there is no real sign-up
+  // to do, and every request already carries a fixed demo bearer token
+  // (see api.ts) regardless of what happens on this screen. Sending
+  // someone here at all — e.g. via the landing page's "S'inscrire" link —
+  // would be a dead end once they submit, so skip straight past it instead.
+  useEffect(() => {
+    if (!authConfigured) nav("/app", { replace: true });
+  }, [nav]);
+
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
