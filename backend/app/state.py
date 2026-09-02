@@ -6,6 +6,7 @@ copy per request.
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from fastapi import Header, HTTPException
@@ -16,7 +17,16 @@ from app.store import Store
 
 auth_provider = create_auth_provider()
 access_controller = AccessController(auth_provider)
-store = Store()
+
+# Real Postgres (Supabase) once DATABASE_URL is set, same in-memory Store as
+# before otherwise — local dev, tests, or a Sanad deploy without a
+# provisioned database yet. See app/database.py: same method surface as
+# Store, so nothing above this line (routers included) has to change.
+if os.getenv("DATABASE_URL", "").strip():
+    from app.database import DatabaseStore
+    store: Any = DatabaseStore()
+else:
+    store: Any = Store()
 
 
 def _claims(authorization: str | None) -> dict[str, Any]:

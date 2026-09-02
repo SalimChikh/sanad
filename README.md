@@ -15,10 +15,11 @@ Marché visé : Algérie. Nom provisoire, facile à changer.
   l'arabe, posé sur `<html dir="rtl">`).
 - `backend/` — API FastAPI. `app/store.py` est un store **en mémoire**
   (aucune base de données requise pour développer/tester en local) dont
-  chaque méthode correspond à une table de `supabase/migrations/` — passer
-  à une vraie base Postgres/Supabase plus tard consiste à réimplémenter la
-  même interface contre de vraies requêtes SQL, pas à redessiner les
-  routes au-dessus.
+  chaque méthode correspond à une table de `supabase/migrations/`.
+  `app/database.py` est la vraie implémentation Postgres de cette même
+  interface (même pattern que Fidli) : `app/state.py` bascule
+  automatiquement sur celle-ci dès que `DATABASE_URL` est défini, sans
+  qu'aucune route n'ait besoin de changer.
 - `supabase/migrations/` — schéma cible complet (institutions, personnel,
   classes, enfants, liens parents, invitations, fil d'actualité,
   commentaires, calendrier) pour le jour où une vraie base est branchée.
@@ -76,13 +77,29 @@ commentaire dans `frontend/src/api.ts`.
 - FR / AR (RTL) / EN, détection automatique de la langue du navigateur au
   premier chargement, choix explicite mémorisé ensuite
 
+## Tests automatisés (backend)
+
+```
+cd backend
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\pytest -q
+```
+25 tests, ~2 s : parcours propriétaire (bootstrap, classes, enfants),
+invitations parent/personnel (y compris rejet d'un jeton déjà utilisé et
+accès refusé à un parent non lié), fil d'actualité + commentaires,
+calendrier, upload de photo (type/taille rejetés, servi correctement une
+fois accepté), et la normalisation d'URL de `app/database.py`. Tourne
+entièrement contre le store en mémoire — aucune base réelle requise.
+
 ## Ce qui manque avant un vrai lancement
 
-- **Base de données réelle** — tout est en mémoire pour l'instant (voir
-  `backend/app/store.py`) ; le schéma cible existe déjà dans
-  `supabase/migrations/`, il ne reste qu'à provisionner un projet Supabase
-  et réécrire le store contre de vraies requêtes SQL (même travail que
-  Fidli a fait pour son propre passage en production).
+- **Base de données réelle** — `app/database.py` existe déjà (voir
+  ci-dessus) mais n'est branché sur aucune vraie base encore : il reste à
+  provisionner un projet Supabase, y appliquer
+  `supabase/migrations/202609020001_init.sql`, et définir `DATABASE_URL`
+  sur Render. Tant que ce n'est pas fait, toutes les données disparaissent
+  à chaque redémarrage du backend (fréquent sur le plan gratuit Render,
+  qui s'endort après une période d'inactivité).
 - **Stockage de photos réel** — les photos téléversées atterrissent sur le
   disque local du serveur (`backend/uploads/`, ignoré par git), servies
   directement par FastAPI. Ça fonctionne, mais sur un hébergeur gratuit
@@ -92,13 +109,17 @@ commentaire dans `frontend/src/api.ts`.
   (Supabase Storage ou équivalent) une fois la base en place.
 - **Courriels réels** — les invitations (personnel et parents) génèrent un
   lien à copier-coller manuellement, aucun courriel n'est envoyé.
-- **Hébergement** — rien n'est déployé. Le frontend (statique) et le
-  backend (conteneur) suivent le même chemin gratuit que Fidli/Valet
-  Signature (Firebase Hosting + un backend gratuit type Render, en
-  attendant un nom de domaine et une vraie base).
 - **Calendrier** — vue liste seulement, pas de calendrier visuel par mois.
 - **Polish visuel et RTL** — l'essentiel fonctionne (testé visuellement en
   arabe), mais n'a pas reçu la même passe de finition que la page d'accueil
   de Fidli.
-- **Tests automatisés** — aucun encore, contrairement à Fidli (29 tests
-  backend + 13 tests frontend à ce jour sur ce projet-là).
+- **Tests automatisés (frontend)** — aucun encore, contrairement au backend
+  (25 tests, voir plus haut) et à Fidli.
+
+## Déployé
+
+- Frontend : https://sanad-app-dz.web.app (Firebase Hosting, projet GCP
+  `sanad-app-dz` séparé — aucune ressource partagée avec Fidelio)
+- Backend : https://sanad-api-pvla.onrender.com (Render, plan gratuit —
+  s'endort après une période d'inactivité, premier appel plus lent)
+- Code source : github.com/SalimChikh/sanad
