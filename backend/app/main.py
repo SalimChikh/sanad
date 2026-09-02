@@ -4,8 +4,10 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from app.routers import auth, calendar, children, classrooms, feed, health, staff
+from app.media import UPLOAD_DIR
+from app.routers import auth, calendar, children, classrooms, feed, health, staff, uploads
 
 DEFAULT_CORS_ORIGINS = [
     "http://localhost:5173",
@@ -30,5 +32,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for router_module in (health, auth, staff, classrooms, children, feed, calendar):
+for router_module in (health, auth, staff, classrooms, children, feed, calendar, uploads):
     app.include_router(router_module.router)
+
+# Serves whatever upload_photo() (routers/uploads.py) wrote to disk back out
+# at the same /uploads/<file> path it returned — see app/media.py for why
+# this is local disk rather than real object storage.
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")

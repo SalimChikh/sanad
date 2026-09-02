@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -20,7 +20,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { request, type CalendarEvent, type Child, type Classroom, type Comment, type Member, type Post, type StaffInvite, type StaffMember } from "./api";
+import { mediaUrl, request, uploadPhoto, type CalendarEvent, type Child, type Classroom, type Comment, type Member, type Post, type StaffInvite, type StaffMember } from "./api";
 import { authConfigured, authProvider } from "./auth";
 import { useLang, type Lang } from "./i18n";
 
@@ -528,9 +528,35 @@ function PostComposer({ childId, onPosted }: { childId: string; onPosted: () => 
   const [tab, setTab] = useState<"note" | "photo" | "meal">("note");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [photoPath, setPhotoPath] = useState("");
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  async function pickPhoto(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Show the chosen file immediately via a local object URL — no need to
+    // wait for the round-trip to the server just to confirm what was picked.
+    setPhotoPreview(URL.createObjectURL(file));
+    setError("");
+    setUploading(true);
+    try {
+      const { path } = await uploadPhoto(file);
+      setPhotoPath(path);
+    } catch (e) {
+      setError((e as Error).message);
+      setPhotoPreview("");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (tab === "photo" && !photoPath) {
+      setError(t("Choisissez une photo avant de publier."));
+      return;
+    }
     setBusy(true);
     setError("");
     const formElement = e.currentTarget;
@@ -538,10 +564,12 @@ function PostComposer({ childId, onPosted }: { childId: string; onPosted: () => 
     try {
       const body: Record<string, unknown> = { child_id: childId };
       if (tab === "note") { body.type = "note"; body.caption = data.caption; }
-      if (tab === "photo") { body.type = "photo"; body.caption = data.caption; body.media_url = data.media_url; }
+      if (tab === "photo") { body.type = "photo"; body.caption = data.caption; body.media_url = photoPath; }
       if (tab === "meal") { body.type = "meal"; body.meal_status = data.meal_status; body.caption = data.caption; }
       await request("/posts", { method: "POST", body: JSON.stringify(body) });
       formElement.reset();
+      setPhotoPath("");
+      setPhotoPreview("");
       onPosted();
     } catch (e) {
       setError((e as Error).message);
@@ -560,7 +588,11 @@ function PostComposer({ childId, onPosted }: { childId: string; onPosted: () => 
       {tab === "note" && <textarea name="caption" placeholder={t("Écrire une note…")} required />}
       {tab === "photo" && (
         <>
-          <input name="media_url" placeholder={t("Lien de la photo (URL)")} required />
+          <label className="photo-picker">
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickPhoto} hidden />
+            {photoPreview ? <img src={photoPreview} alt="" /> : <span><Camera size={20} /> {t("Choisir une photo")}</span>}
+            {uploading && <span className="uploading-badge">{t("Envoi…")}</span>}
+          </label>
           <textarea name="caption" placeholder={t("Écrire une note…")} />
         </>
       )}
@@ -575,7 +607,7 @@ function PostComposer({ childId, onPosted }: { childId: string; onPosted: () => 
         </>
       )}
       {error && <p className="error">{error}</p>}
-      <button className="button" disabled={busy}>
+      <button className="button" disabled={busy || uploading}>
         {tab === "note" ? t("Publier une note") : tab === "photo" ? t("Publier une photo") : t("Publier le repas")}
       </button>
     </form>
@@ -620,7 +652,7 @@ function PostCard({ post, lang }: { post: Post; lang: Lang }) {
         <span className={`badge type-${post.type}`}>{t(postTypeLabels[post.type])}</span>
         <small>{new Date(post.created_at).toLocaleString(locale)}</small>
       </div>
-      {post.media_url && <img className="post-photo" src={post.media_url} alt="" />}
+      {post.media_url && <img className="post-photo" src={mediaUrl(post.media_url)} alt="" />}
       {post.meal_status && (
         <p className="meal-status">
           {post.meal_status === "ate_all" ? t("A tout mangé") : post.meal_status === "ate_some" ? t("A mangé un peu") : t("A refusé")}

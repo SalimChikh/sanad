@@ -37,6 +37,25 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   return r.json();
 }
 
+// The backend's origin without the /api/v1 suffix — /uploads/<file> is
+// mounted directly on the app, not under the API prefix (see
+// backend/app/main.py), so it needs to be reached without that prefix too.
+const API_ORIGIN = API.replace(/\/api\/v1\/?$/, "");
+
+/** Turns a post's media_url into something an <img> can load: a relative
+ * "/uploads/..." path (this backend's own local-disk storage — see
+ * backend/app/media.py) is resolved against the API's origin; anything
+ * else (a future real CDN/storage URL) is assumed already absolute. */
+export function mediaUrl(path: string): string {
+  return path.startsWith("/") ? `${API_ORIGIN}${path}` : path;
+}
+
+export async function uploadPhoto(file: File): Promise<{ path: string }> {
+  const body = new FormData();
+  body.append("file", file);
+  return request<{ path: string }>("/uploads", { method: "POST", body });
+}
+
 export type Institution = {
   kind: "staff";
   user_id: string;

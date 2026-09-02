@@ -69,7 +69,9 @@ commentaire dans `frontend/src/api.ts`.
 
 - Créer un établissement (école ou garderie), inviter du personnel
 - Classes, enfants, invitation de parents par lien à usage unique
-- Fil d'actualité par enfant : photo, note libre, repas — avec commentaires
+- Fil d'actualité par enfant : photo (vrai téléversement depuis le
+  téléphone/l'ordinateur, voir `backend/app/media.py`), note libre, repas —
+  avec commentaires
 - Calendrier simple (liste d'événements)
 - FR / AR (RTL) / EN, détection automatique de la langue du navigateur au
   premier chargement, choix explicite mémorisé ensuite
@@ -81,10 +83,13 @@ commentaire dans `frontend/src/api.ts`.
   `supabase/migrations/`, il ne reste qu'à provisionner un projet Supabase
   et réécrire le store contre de vraies requêtes SQL (même travail que
   Fidli a fait pour son propre passage en production).
-- **Vrai téléversement de photos** — le composeur de publication accepte
-  aujourd'hui une URL déjà hébergée, pas un fichier local ; il faut un
-  bucket de stockage (Supabase Storage ou équivalent) une fois la base en
-  place, même pattern que `/assets` dans Fidli.
+- **Stockage de photos réel** — les photos téléversées atterrissent sur le
+  disque local du serveur (`backend/uploads/`, ignoré par git), servies
+  directement par FastAPI. Ça fonctionne, mais sur un hébergeur gratuit
+  comme Render le disque n'est pas garanti persistant : une photo peut
+  disparaître après un redéploiement ou un redémarrage à froid — même mise
+  en garde que le SQLite de Valet Signature. À remplacer par un vrai bucket
+  (Supabase Storage ou équivalent) une fois la base en place.
 - **Courriels réels** — les invitations (personnel et parents) génèrent un
   lien à copier-coller manuellement, aucun courriel n'est envoyé.
 - **Hébergement** — rien n'est déployé. Le frontend (statique) et le
