@@ -73,7 +73,7 @@ commentaire dans `frontend/src/api.ts`.
 - Fil d'actualité par enfant : photo (vrai téléversement depuis le
   téléphone/l'ordinateur, voir `backend/app/media.py`), note libre, repas —
   avec commentaires
-- Calendrier simple (liste d'événements)
+- Calendrier : vraie grille mensuelle (navigation, jour sélectionné, ajout/suppression d'événement)
 - FR / AR (RTL) / EN, détection automatique de la langue du navigateur au
   premier chargement, choix explicite mémorisé ensuite
 
@@ -109,7 +109,6 @@ entièrement contre le store en mémoire — aucune base réelle requise.
   (Supabase Storage ou équivalent) une fois la base en place.
 - **Courriels réels** — les invitations (personnel et parents) génèrent un
   lien à copier-coller manuellement, aucun courriel n'est envoyé.
-- **Calendrier** — vue liste seulement, pas de calendrier visuel par mois.
 - **Polish visuel et RTL** — l'essentiel fonctionne (testé visuellement en
   arabe), mais n'a pas reçu la même passe de finition que la page d'accueil
   de Fidli.
