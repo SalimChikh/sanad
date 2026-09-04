@@ -523,7 +523,7 @@ function ParentInvitePanel({ childId, onClose }: { childId: string; onClose: () 
   );
 }
 
-function PostComposer({ childId, onPosted }: { childId: string; onPosted: () => void }) {
+export function PostComposer({ childId, onPosted }: { childId: string; onPosted: () => void }) {
   const { t } = useLang();
   const [tab, setTab] = useState<"note" | "photo" | "meal">("note");
   const [busy, setBusy] = useState(false);
@@ -729,7 +729,7 @@ function ClassroomsPage({ institutionId }: { institutionId: string }) {
 
 // ---------------------------------------------------------------- calendar
 
-function dayKey(d: Date): string {
+export function dayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
@@ -737,7 +737,7 @@ function dayKey(d: Date): string {
  * days of the previous/next month so every row is full — a fixed week
  * start keeps the grid simple across all three languages rather than
  * following each locale's actual first-day-of-week convention. */
-function buildMonthGrid(monthCursor: Date): Date[] {
+export function buildMonthGrid(monthCursor: Date): Date[] {
   const first = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
   const startOffset = (first.getDay() + 6) % 7; // Monday = 0
   const start = new Date(first);
@@ -749,7 +749,7 @@ function buildMonthGrid(monthCursor: Date): Date[] {
   });
 }
 
-function CalendarPage() {
+export function CalendarPage() {
   const { t, lang } = useLang();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [monthCursor, setMonthCursor] = useState(() => new Date());

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Header, HTTPException
 
 from app.models.schemas import CalendarEventCreate
-from app.state import _staff, require_child_access, store
+from app.state import _identity, _staff, require_child_access, store
 
 router = APIRouter()
 
@@ -10,10 +10,20 @@ router = APIRouter()
 def list_events(child_id: str | None = None, authorization: str | None = Header(default=None)):
     if child_id:
         _user, child = require_child_access(authorization, child_id)
-        institution_id = child["institution_id"]
-    else:
-        institution_id = _staff(authorization)["institution_id"]
-    return store.list_events(institution_id)
+        return store.list_events(child["institution_id"])
+
+    # No child_id: staff sees their whole institution's calendar. A parent
+    # has no staff membership (this used to just 403 them — the parent-side
+    # /app/calendar route was silently broken) — for a parent, show events
+    # from every institution any of their linked children belongs to.
+    user = _identity(authorization)
+    membership = store.staff_membership(user["id"])
+    if membership:
+        return store.list_events(membership["institution_id"])
+
+    institution_ids = {child["institution_id"] for child in store.parent_children(user["id"])}
+    events = [event for institution_id in institution_ids for event in store.list_events(institution_id)]
+    return sorted(events, key=lambda event: event["start_at"])
 
 
 @router.post("/api/v1/calendar-events", status_code=201)
