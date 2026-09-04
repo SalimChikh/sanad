@@ -7,6 +7,7 @@ from app.main import app
 
 client = TestClient(app)
 OWNER = {"Authorization": "Bearer demo-owner-token"}
+client.post("/api/v1/auth/bootstrap", json={"institution_name": "Garderie Uploads", "institution_type": "daycare"}, headers=OWNER)
 
 
 def _tiny_png() -> bytes:

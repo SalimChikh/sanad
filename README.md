@@ -70,9 +70,9 @@ commentaire dans `frontend/src/api.ts`.
 
 - Créer un établissement (école ou garderie), inviter du personnel
 - Classes, enfants, invitation de parents par lien à usage unique
-- Fil d'actualité par enfant : photo (vrai téléversement depuis le
-  téléphone/l'ordinateur, voir `backend/app/media.py`), note libre, repas —
-  avec commentaires
+- Fil d'actualité par enfant : photo (téléversement depuis le
+  téléphone/l'ordinateur vers Supabase Storage, voir `backend/app/media.py`),
+  note libre, repas — avec commentaires
 - Calendrier : vraie grille mensuelle (navigation, jour sélectionné, ajout/suppression d'événement)
 - FR / AR (RTL) / EN, détection automatique de la langue du navigateur au
   premier chargement, choix explicite mémorisé ensuite
@@ -84,12 +84,13 @@ cd backend
 .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\pytest -q
 ```
-25 tests, ~2 s : parcours propriétaire (bootstrap, classes, enfants),
+29 tests, ~2 s : parcours propriétaire (bootstrap, classes, enfants),
 invitations parent/personnel (y compris rejet d'un jeton déjà utilisé et
 accès refusé à un parent non lié), fil d'actualité + commentaires,
 calendrier, upload de photo (type/taille rejetés, servi correctement une
-fois accepté), et la normalisation d'URL de `app/database.py`. Tourne
-entièrement contre le store en mémoire — aucune base réelle requise.
+fois accepté), la normalisation d'URL de `app/database.py`, et la bascule
+Supabase Storage/disque local de `app/media.py`. Tourne entièrement contre
+le store en mémoire et le disque local — aucun service externe requis.
 
 ## Ce qui manque avant un vrai lancement
 
@@ -98,13 +99,10 @@ entièrement contre le store en mémoire — aucune base réelle requise.
   (le host "Direct connection" de Supabase est IPv6-only, incompatible avec
   la sortie IPv4 du plan gratuit Render — utiliser le pooler en session
   mode). Les données survivent maintenant aux redémarrages du backend.
-- **Stockage de photos réel** — les photos téléversées atterrissent sur le
-  disque local du serveur (`backend/uploads/`, ignoré par git), servies
-  directement par FastAPI. Ça fonctionne, mais sur un hébergeur gratuit
-  comme Render le disque n'est pas garanti persistant : une photo peut
-  disparaître après un redéploiement ou un redémarrage à froid — même mise
-  en garde que le SQLite de Valet Signature. La base Supabase étant
-  maintenant en place, la suite logique est Supabase Storage.
+- ~~Stockage de photos réel~~ — fait : bucket `photos` (public, 5 Mo max,
+  JPG/PNG/WebP) créé sur Supabase Storage, `app/media.py` y téléverse dès
+  que `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` sont définis sur Render — sinon
+  retombe sur le disque local (dev sans Supabase configuré).
 - **Courriels réels** — les invitations (personnel et parents) génèrent un
   lien à copier-coller manuellement, aucun courriel n'est envoyé.
 - **Polish visuel et RTL** — l'essentiel fonctionne (testé visuellement en
@@ -122,4 +120,6 @@ entièrement contre le store en mémoire — aucune base réelle requise.
 - Base de données : Supabase (projet `sanad`, région Paris/eu-west-3),
   connectée via le connection pooler (voir plus haut) — `DATABASE_URL` sur
   Render
+- Stockage de photos : bucket `photos` sur le même projet Supabase —
+  `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` sur Render
 - Code source : github.com/SalimChikh/sanad
