@@ -35,10 +35,21 @@ def _claims(authorization: str | None) -> dict[str, Any]:
 
 def _identity(authorization: str | None) -> dict[str, Any]:
     """Resolve the bearer token to a stable app_users row (creating it on
-    first sight — same "just-in-time" identity pattern as Fidli)."""
+    first sight — same "just-in-time" identity pattern as Fidli).
+
+    The demo bearer tokens (see AccessController.claims — they set
+    claims["demo"]) must always resolve under auth_provider="demo",
+    regardless of what AUTH_PROVIDER is actually configured to: once real
+    Firebase auth got wired up, `auth_provider.name` became "firebase" even
+    for a request using demo-owner-token (which never touches Firebase at
+    all), so resolve_user() started keying it under ("firebase", <same
+    sub>) — a brand new, disconnected identity every time, silently
+    orphaning whatever institution/data the "demo" identity already had.
+    """
     claims = _claims(authorization)
+    provider_name = "demo" if claims.get("demo") else (auth_provider.name if auth_provider else "demo")
     return store.resolve_user(
-        auth_provider.name if auth_provider else "demo",
+        provider_name,
         str(claims["sub"]),
         claims.get("email"),
     )
