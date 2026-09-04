@@ -8,6 +8,7 @@ import {
   Navigate,
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import {
   Baby,
@@ -80,6 +81,14 @@ function Landing() {
 function Auth({ register = false }: { register?: boolean }) {
   const { t } = useLang();
   const nav = useNavigate();
+  const [params] = useSearchParams();
+  // A parent following their invite link with no account yet gets bounced
+  // here as /login?next=/parent-invite/<token> (see AcceptInvite) — without
+  // carrying that through, they'd land on /app after signing up and get
+  // asked to "create an institution" instead of being linked to their
+  // child. Landing-page sign-up (no ?next) still lands on /app as before,
+  // which is where a brand-new owner belongs.
+  const next = params.get("next") || "/app";
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -89,8 +98,8 @@ function Auth({ register = false }: { register?: boolean }) {
   // someone here at all — e.g. via the landing page's "S'inscrire" link —
   // would be a dead end once they submit, so skip straight past it instead.
   useEffect(() => {
-    if (!authConfigured) nav("/app", { replace: true });
-  }, [nav]);
+    if (!authConfigured) nav(next, { replace: true });
+  }, [nav, next]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -105,7 +114,7 @@ function Auth({ register = false }: { register?: boolean }) {
       }
       const result = register ? await authProvider.signUp(credentials) : await authProvider.signInWithPassword(credentials);
       if (result.error) throw result.error;
-      nav("/app");
+      nav(next);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -119,13 +128,15 @@ function Auth({ register = false }: { register?: boolean }) {
     try {
       const result = await authProvider.signInWithGoogle();
       if (result.error) throw result.error;
-      nav("/app");
+      nav(next);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
+
+  const nextParam = next === "/app" ? "" : `?next=${encodeURIComponent(next)}`;
 
   return (
     <div className="auth">
@@ -156,9 +167,9 @@ function Auth({ register = false }: { register?: boolean }) {
         </button>
         <small>
           {register ? (
-            <>{t("Déjà inscrit ?")} <Link to="/login">{t("Se connecter")}</Link></>
+            <>{t("Déjà inscrit ?")} <Link to={`/login${nextParam}`}>{t("Se connecter")}</Link></>
           ) : (
-            <>{t("Pas encore de compte ?")} <Link to="/register">{t("S’inscrire")}</Link></>
+            <>{t("Pas encore de compte ?")} <Link to={`/register${nextParam}`}>{t("S’inscrire")}</Link></>
           )}
         </small>
       </form>
@@ -1184,10 +1195,29 @@ function AcceptInvite({ kind }: { kind: "staff" | "parent" }) {
   }, [allowed, kind, nav, token]);
 
   if (status === "error") return <div className="page"><p className="error">{t("Invitation invalide ou expirée.")}</p></div>;
-  return <div className="page"><p>{t("Chargement…")}</p></div>;
+  return <SlowLoad />;
 }
 
 // ---------------------------------------------------------------- protected gate
+
+/** Same "Chargement…" everywhere, but after a few seconds it explains
+ * *why* — Render's free backend plan sleeps after inactivity, and the
+ * first request waking it back up can take 30-50s. A bare spinner that
+ * long reads as broken; this one at least tells you it isn't. */
+function SlowLoad() {
+  const { t } = useLang();
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <div className="page">
+      <p>{t("Chargement…")}</p>
+      {slow && <p className="empty small">{t("Le serveur gratuit se réveille — ça peut prendre jusqu’à une minute après une pause. Merci de patienter.")}</p>}
+    </div>
+  );
+}
 
 function Protected() {
   const [allowed, setAllowed] = useState<boolean | null>(authConfigured ? null : true);
@@ -1202,9 +1232,9 @@ function Protected() {
     request<Member>("/auth/me").then(setMember).catch(() => setMember("none"));
   }, [allowed]);
 
-  if (allowed === null) return <div className="page"><p>Chargement…</p></div>;
+  if (allowed === null) return <SlowLoad />;
   if (!allowed) return <Navigate to="/login" replace />;
-  if (member === null) return <div className="page"><p>Chargement…</p></div>;
+  if (member === null) return <SlowLoad />;
   if (member === "none") return <CreateInstitution onCreated={setMember} />;
   if (member.kind === "staff") return <StaffShell member={member} />;
   return <ParentShell member={member} />;
