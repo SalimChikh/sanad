@@ -38,7 +38,8 @@ def create_post(body: PostCreate, authorization: str | None = Header(default=Non
     post = store.create_post(
         member["institution_id"], member["user_id"], body.type,
         child_id=body.child_id, classroom_id=body.classroom_id,
-        caption=body.caption, media_url=body.media_url, meal_status=body.meal_status,
+        caption=body.caption, media_url=body.media_url, media_urls=body.media_urls,
+        mood=body.mood, meal_status=body.meal_status,
     )
     return _with_author(post)
 

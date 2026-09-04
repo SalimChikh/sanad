@@ -89,11 +89,19 @@ class ParentInviteCreate(BaseModel):
 
 
 class PostCreate(BaseModel):
-    type: str = Field(pattern=r"^(photo|note|meal|nap|activity|announcement)$")
+    # "daily" is the one composer the staff UI actually offers now — a
+    # single end-of-day entry combining a summary, photos, mood and meal,
+    # instead of three separate posts. The older single-purpose types
+    # (photo/note/meal/nap/activity) stay valid at the API level — old data
+    # still reads fine, and nothing stops a future integration from using
+    # them directly — "announcement" is the only other one the UI creates.
+    type: str = Field(pattern=r"^(daily|photo|note|meal|nap|activity|announcement)$")
     child_id: str | None = None
     classroom_id: str | None = None
     caption: str | None = Field(default=None, max_length=2000)
     media_url: str | None = None
+    media_urls: list[str] = Field(default_factory=list)
+    mood: str | None = Field(default=None, pattern=r"^(happy|calm|tired|difficult)$")
     meal_status: str | None = Field(default=None, pattern=r"^(ate_all|ate_some|refused)$")
 
 

@@ -30,6 +30,30 @@ def test_post_note_appears_in_child_feed_for_staff_and_parent():
     assert any(p["id"] == post["id"] for p in parent_feed)
 
 
+def test_daily_post_combines_summary_photos_mood_and_meal():
+    child = _child_with_linked_parent("Amir")
+    post = client.post("/api/v1/posts", json={
+        "type": "daily", "child_id": child["id"],
+        "caption": "Belle journée, a bien participé aux activités.",
+        "media_urls": ["/uploads/a.png", "/uploads/b.png"],
+        "mood": "happy", "meal_status": "ate_all",
+    }, headers=OWNER)
+    assert post.status_code == 201
+    body = post.json()
+    assert body["media_urls"] == ["/uploads/a.png", "/uploads/b.png"]
+    assert body["mood"] == "happy"
+    assert body["meal_status"] == "ate_all"
+
+    feed = client.get(f"/api/v1/feed?child_id={child['id']}", headers=PARENT).json()
+    assert any(p["id"] == body["id"] and p["mood"] == "happy" for p in feed)
+
+
+def test_daily_post_rejects_invalid_mood():
+    child = _child_with_linked_parent("Sami")
+    response = client.post("/api/v1/posts", json={"type": "daily", "child_id": child["id"], "mood": "furious"}, headers=OWNER)
+    assert response.status_code == 422
+
+
 def test_meal_post_requires_valid_status():
     child = _child_with_linked_parent("Ilyes")
     bad = client.post("/api/v1/posts", json={"type": "meal", "child_id": child["id"], "meal_status": "not_a_status"}, headers=OWNER)

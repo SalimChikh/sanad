@@ -241,13 +241,14 @@ class Store:
     def create_post(
         self, institution_id: str, author_user_id: str, type_: PostType, *,
         child_id: str | None = None, classroom_id: str | None = None,
-        caption: str | None = None, media_url: str | None = None, meal_status: str | None = None,
+        caption: str | None = None, media_url: str | None = None, media_urls: list[str] | None = None,
+        mood: str | None = None, meal_status: str | None = None,
     ) -> dict[str, Any]:
         post_id = _uid()
         post = {
             "id": post_id, "institution_id": institution_id, "child_id": child_id, "classroom_id": classroom_id,
             "author_user_id": author_user_id, "type": type_, "caption": caption, "media_url": media_url,
-            "meal_status": meal_status, "created_at": _now(),
+            "media_urls": media_urls or [], "mood": mood, "meal_status": meal_status, "created_at": _now(),
         }
         self.posts[post_id] = post
         return post

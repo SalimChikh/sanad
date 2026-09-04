@@ -323,10 +323,11 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
   const { t } = useLang();
   const [children, setChildren] = useState<Child[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const load = () => request<Child[]>("/children?include_inactive=true").then(setChildren);
+  const load = () => request<Child[]>("/children?include_inactive=true").then(setChildren).finally(() => setLoading(false));
   useEffect(() => {
     void load();
     request<Classroom[]>("/classrooms").then(setClassrooms);
@@ -405,7 +406,8 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
             </button>
           </div>
         ))}
-        {!children.length && <p className="empty">{t("Aucun enfant pour l’instant.")}</p>}
+        {loading && <p className="empty">{t("Chargement…")}</p>}
+        {!loading && !children.length && <p className="empty">{t("Aucun enfant pour l’instant.")}</p>}
       </div>
       {institutionId && null}
     </div>
@@ -443,12 +445,13 @@ function ChildDetail({ canPost }: { canPost: boolean }) {
   const [child, setChild] = useState<Child | null>(null);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
   const [error, setError] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const loadChild = () => request<Child>(`/children/${childId}`).then(setChild).catch((e) => setError((e as Error).message));
-  const loadFeed = () => request<Post[]>(`/feed?child_id=${childId}`).then(setPosts).catch((e) => setError((e as Error).message));
+  const loadFeed = () => request<Post[]>(`/feed?child_id=${childId}`).then(setPosts).catch((e) => setError((e as Error).message)).finally(() => setFeedLoading(false));
   useEffect(() => {
     if (!childId) return;
     void loadChild();
@@ -489,7 +492,8 @@ function ChildDetail({ canPost }: { canPost: boolean }) {
       {error && <p className="error">{error}</p>}
       <div className="feed">
         {posts.map((post) => <PostCard key={post.id} post={post} lang={lang} />)}
-        {!posts.length && <p className="empty">{t("Aucune publication pour le moment.")}</p>}
+        {feedLoading && <p className="empty">{t("Chargement…")}</p>}
+        {!feedLoading && !posts.length && <p className="empty">{t("Aucune publication pour le moment.")}</p>}
       </div>
     </div>
   );
@@ -772,8 +776,9 @@ function PostCard({ post, lang }: { post: Post; lang: Lang }) {
 function ClassroomsPage({ institutionId }: { institutionId: string }) {
   const { t } = useLang();
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const load = () => request<Classroom[]>("/classrooms").then(setClassrooms);
+  const load = () => request<Classroom[]>("/classrooms").then(setClassrooms).finally(() => setLoading(false));
   useEffect(() => { void load(); }, []);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -805,7 +810,8 @@ function ClassroomsPage({ institutionId }: { institutionId: string }) {
             {c.age_group && <p>{c.age_group}</p>}
           </div>
         ))}
-        {!classrooms.length && <p className="empty">{t("Aucune classe pour l’instant.")}</p>}
+        {loading && <p className="empty">{t("Chargement…")}</p>}
+        {!loading && !classrooms.length && <p className="empty">{t("Aucune classe pour l’instant.")}</p>}
       </div>
       {institutionId && null}
     </div>

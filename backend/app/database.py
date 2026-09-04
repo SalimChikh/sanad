@@ -339,18 +339,19 @@ class DatabaseStore:
     def create_post(
         self, institution_id: str, author_user_id: str, type_: str, *,
         child_id: str | None = None, classroom_id: str | None = None,
-        caption: str | None = None, media_url: str | None = None, meal_status: str | None = None,
+        caption: str | None = None, media_url: str | None = None, media_urls: list[str] | None = None,
+        mood: str | None = None, meal_status: str | None = None,
     ) -> dict[str, Any]:
         assert self.engine
         with self.engine.begin() as connection:
             row = connection.execute(text("""
-                insert into posts(institution_id, child_id, classroom_id, author_user_id, type, caption, media_url, meal_status)
-                values (:institution, :child, :classroom, :author, :type, :caption, :media_url, :meal_status)
+                insert into posts(institution_id, child_id, classroom_id, author_user_id, type, caption, media_url, media_urls, mood, meal_status)
+                values (:institution, :child, :classroom, :author, :type, :caption, :media_url, :media_urls, :mood, :meal_status)
                 returning *
             """), {
                 "institution": institution_id, "child": child_id, "classroom": classroom_id,
                 "author": author_user_id, "type": type_, "caption": caption,
-                "media_url": media_url, "meal_status": meal_status,
+                "media_url": media_url, "media_urls": media_urls or [], "mood": mood, "meal_status": meal_status,
             }).mappings().one()
         return _dict(row) or {}
 
