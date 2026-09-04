@@ -10,3 +10,9 @@ services:
         value: "true"
       - key: CORS_ORIGINS
         value: "https://sanad-app-dz.web.app,https://sanad-app-dz.firebaseapp.com"
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
