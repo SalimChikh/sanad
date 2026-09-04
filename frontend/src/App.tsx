@@ -291,8 +291,8 @@ function ParentShell({ member }: { member: Member & { kind: "parent" } }) {
         </Link>
         <p className="institution-name">{t("Mes enfants")}</p>
         <nav>
-          <NavLink to="/app/children"><Baby size={18} /> {t("Mes enfants")}</NavLink>
           <NavLink to="/app/calendar"><Calendar size={18} /> {t("Calendrier")}</NavLink>
+          <NavLink to="/app/children"><Baby size={18} /> {t("Mes enfants")}</NavLink>
         </nav>
         <LanguageSwitcher />
         <button className="logout" onClick={logout}>
@@ -301,7 +301,9 @@ function ParentShell({ member }: { member: Member & { kind: "parent" } }) {
       </aside>
       <section className="content">
         <Routes>
-          <Route index element={<Navigate to="children" replace />} />
+          {/* A parent's first stop is "what happened today" — the calendar
+              with that day's communications — not a bare list of children. */}
+          <Route index element={<Navigate to="calendar" replace />} />
           <Route path="children" element={<ParentChildren children={member.children} />} />
           <Route path="children/:childId" element={<ChildDetail canPost={false} />} />
           <Route path="calendar" element={<CalendarPage parentChildren={member.children} />} />
@@ -928,6 +930,14 @@ export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = 
     return map;
   }, [events]);
 
+  const postDayKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const posts of Object.values(postsByChild)) {
+      for (const post of posts) keys.add(dayKey(new Date(post.created_at)));
+    }
+    return keys;
+  }, [postsByChild]);
+
   const today = new Date();
   const days = useMemo(() => buildMonthGrid(monthCursor), [monthCursor]);
   const selectedEvents = (eventsByDay.get(dayKey(selected)) ?? []).slice().sort((a, b) => a.start_at.localeCompare(b.start_at));
@@ -1022,6 +1032,7 @@ export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = 
           const isToday = dayKey(day) === dayKey(today);
           const isSelected = dayKey(day) === dayKey(selected);
           const dayEvents = eventsByDay.get(dayKey(day)) ?? [];
+          const hasPosts = postDayKeys.has(dayKey(day));
           return (
             <button
               type="button"
@@ -1030,7 +1041,12 @@ export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = 
               onClick={() => setSelected(day)}
             >
               <span className="calendar-cell-num">{day.getDate()}</span>
-              {dayEvents.length > 0 && <span className="calendar-cell-dots">{dayEvents.slice(0, 3).map((e) => <i key={e.id} />)}</span>}
+              {(dayEvents.length > 0 || hasPosts) && (
+                <span className="calendar-cell-dots">
+                  {dayEvents.slice(0, 3).map((e) => <i key={e.id} />)}
+                  {hasPosts && <i className="post" />}
+                </span>
+              )}
             </button>
           );
         })}
