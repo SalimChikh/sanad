@@ -293,6 +293,8 @@ a { color: var(--green); text-decoration: none; }
   text-transform: capitalize;
   padding-bottom: 4px;
 }
+.calendar-weekday.weekend { color: var(--green); }
+.calendar-cell.weekend { background: #f6f2e8; }
 .calendar-cell {
   display: flex;
   flex-direction: column;

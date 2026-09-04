@@ -25,9 +25,9 @@ describe("buildMonthGrid()", () => {
     expect(buildMonthGrid(new Date(2026, 8, 1))).toHaveLength(42);
   });
 
-  it("starts on a Monday", () => {
+  it("starts on a Sunday — the Algerian work week runs Sunday to Thursday", () => {
     const grid = buildMonthGrid(new Date(2026, 8, 1));
-    expect(grid[0].getDay()).toBe(1); // 1 = Monday
+    expect(grid[0].getDay()).toBe(0); // 0 = Sunday
   });
 
   it("includes every day of the target month", () => {

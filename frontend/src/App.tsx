@@ -884,8 +884,10 @@ export function dayKey(d: Date): string {
  * start keeps the grid simple across all three languages rather than
  * following each locale's actual first-day-of-week convention. */
 export function buildMonthGrid(monthCursor: Date): Date[] {
+  // Sunday-first — the Algerian work week runs Sunday to Thursday, weekend
+  // Friday/Saturday, unlike the Monday-first convention used elsewhere.
   const first = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
-  const startOffset = (first.getDay() + 6) % 7; // Monday = 0
+  const startOffset = first.getDay(); // Sunday = 0, already the offset we want
   const start = new Date(first);
   start.setDate(first.getDate() - startOffset);
   return Array.from({ length: 42 }, (_, i) => {
@@ -893,6 +895,12 @@ export function buildMonthGrid(monthCursor: Date): Date[] {
     d.setDate(start.getDate() + i);
     return d;
   });
+}
+
+/** Friday (5) and Saturday (6) — Algeria's weekend. */
+function isWeekend(d: Date): boolean {
+  const day = d.getDay();
+  return day === 5 || day === 6;
 }
 
 export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = {}) {
@@ -911,14 +919,22 @@ export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = 
   // A parent's calendar also surfaces that day's communications (photos,
   // notes, meals…) for each of their children — not just institution
   // events — since "what happened today" is really what a parent wants
-  // when they click a day, not a bare events list.
+  // when they click a day, not a bare events list. Tracked as its own
+  // loading flag, separate from eventsLoading: on Render's free tier the
+  // backend can take up to a minute to wake up, and events tend to
+  // resolve first (a shorter, simpler query) — without this, "Aucune
+  // communication ce jour" could flash true before the posts had even
+  // finished loading, reading as "there's nothing here" when it was
+  // really just still loading.
+  const [postsLoading, setPostsLoading] = useState(Boolean(parentChildren?.length));
   useEffect(() => {
     if (!parentChildren?.length) return;
-    for (const child of parentChildren) {
-      request<Post[]>(`/feed?child_id=${child.id}`).then((posts) => {
+    setPostsLoading(true);
+    Promise.all(
+      parentChildren.map((child) => request<Post[]>(`/feed?child_id=${child.id}`).then((posts) => {
         setPostsByChild((prev) => ({ ...prev, [child.id]: posts }));
-      });
-    }
+      })),
+    ).finally(() => setPostsLoading(false));
   }, [parentChildren]);
 
   const eventsByDay = useMemo(() => {
@@ -1024,8 +1040,12 @@ export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = 
 
       <div className="calendar-grid">
         {Array.from({ length: 7 }, (_, i) => {
-          const sample = new Date(2024, 0, 1 + i); // a known Monday-start week, for weekday labels only
-          return <div className="calendar-weekday" key={i}>{sample.toLocaleDateString(locale, { weekday: "short" })}</div>;
+          const sample = new Date(2023, 11, 31 + i); // a known Sunday-start week, for weekday labels only
+          return (
+            <div className={`calendar-weekday${isWeekend(sample) ? " weekend" : ""}`} key={i}>
+              {sample.toLocaleDateString(locale, { weekday: "short" })}
+            </div>
+          );
         })}
         {days.map((day) => {
           const inMonth = day.getMonth() === monthCursor.getMonth();
@@ -1037,7 +1057,7 @@ export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = 
             <button
               type="button"
               key={day.toISOString()}
-              className={["calendar-cell", !inMonth && "dim", isToday && "today", isSelected && "selected"].filter(Boolean).join(" ")}
+              className={["calendar-cell", !inMonth && "dim", isToday && "today", isSelected && "selected", isWeekend(day) && "weekend"].filter(Boolean).join(" ")}
               onClick={() => setSelected(day)}
             >
               <span className="calendar-cell-num">{day.getDate()}</span>
@@ -1069,13 +1089,14 @@ export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = 
         ))}
         {!eventsLoading && !selectedEvents.length && !parentChildren && <p className="empty">{t("Aucun événement ce jour.")}</p>}
 
-        {selectedPostsByChild.map(({ child, posts }) => (
+        {parentChildren && postsLoading && <p className="empty">{t("Chargement…")}</p>}
+        {!postsLoading && selectedPostsByChild.map(({ child, posts }) => (
           <div className="calendar-day-child-feed" key={child.id}>
             {parentChildren && parentChildren.length > 1 && <h3 className="calendar-day-child-name">{child.first_name}</h3>}
             {posts.map((post) => <PostCard key={post.id} post={post} lang={lang} />)}
           </div>
         ))}
-        {parentChildren && !eventsLoading && !selectedEvents.length && !selectedPostsByChild.length && (
+        {parentChildren && !eventsLoading && !postsLoading && !selectedEvents.length && !selectedPostsByChild.length && (
           <p className="empty">{t("Aucune communication ce jour.")}</p>
         )}
       </div>
