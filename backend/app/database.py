@@ -215,9 +215,14 @@ class DatabaseStore:
     def list_children(self, institution_id: str, classroom_id: str | None = None) -> list[dict[str, Any]]:
         assert self.engine
         with self.engine.connect() as connection:
+            # Cast the parameter explicitly: passed as NULL when no filter is
+            # requested, Postgres can't infer it's a uuid to compare against
+            # classroom_id (pgbouncer's session pooler surfaces this as
+            # "AmbiguousParameter" — a plain direct connection tends to
+            # infer it from context and hide the same underlying issue).
             rows = connection.execute(text("""
                 select * from children where institution_id = :institution and active
-                  and (:classroom is null or classroom_id = :classroom)
+                  and (cast(:classroom as uuid) is null or classroom_id = cast(:classroom as uuid))
                 order by first_name
             """), {"institution": institution_id, "classroom": classroom_id}).mappings()
             return _list(rows)
