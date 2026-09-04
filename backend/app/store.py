@@ -175,6 +175,32 @@ class Store:
     def list_classrooms(self, institution_id: str) -> list[dict[str, Any]]:
         return [c for c in self.classrooms.values() if c["institution_id"] == institution_id]
 
+    def classroom(self, classroom_id: str) -> dict[str, Any] | None:
+        return self.classrooms.get(classroom_id)
+
+    def update_classroom(self, classroom_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
+        classroom = self.classrooms.get(classroom_id)
+        if not classroom:
+            return None
+        classroom.update(patch)
+        return classroom
+
+    def delete_classroom(self, institution_id: str, classroom_id: str) -> bool:
+        classroom = self.classrooms.get(classroom_id)
+        if not classroom or classroom["institution_id"] != institution_id:
+            return False
+        del self.classrooms[classroom_id]
+        # Same as the DB schema's ON DELETE behaviour: children keep
+        # existing (just unassigned from any classroom), staff assignments
+        # to this classroom are dropped rather than left dangling.
+        for child in self.children.values():
+            if child["classroom_id"] == classroom_id:
+                child["classroom_id"] = None
+        for rec in self.staff.values():
+            if classroom_id in rec.get("classroom_ids", []):
+                rec["classroom_ids"] = [c for c in rec["classroom_ids"] if c != classroom_id]
+        return True
+
     # ---------------------------------------------------------------- children
     def create_child(self, institution_id: str, first_name: str, last_name: str, birth_date: str | None, classroom_id: str | None) -> dict[str, Any]:
         child_id = _uid()

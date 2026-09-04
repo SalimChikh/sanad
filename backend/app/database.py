@@ -232,6 +232,34 @@ class DatabaseStore:
             """), {"institution": institution_id}).mappings()
             return _list(rows)
 
+    def classroom(self, classroom_id: str) -> dict[str, Any] | None:
+        assert self.engine
+        with self.engine.connect() as connection:
+            row = connection.execute(text("select * from classrooms where id = :id"), {"id": classroom_id}).mappings().first()
+        return _dict(row)
+
+    def update_classroom(self, classroom_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
+        assert self.engine
+        if not patch:
+            return self.classroom(classroom_id)
+        columns = ", ".join(f"{key} = :{key}" for key in patch)
+        with self.engine.begin() as connection:
+            row = connection.execute(text(f"""
+                update classrooms set {columns} where id = :id returning *
+            """), {**patch, "id": classroom_id}).mappings().first()
+        return _dict(row)
+
+    def delete_classroom(self, institution_id: str, classroom_id: str) -> bool:
+        assert self.engine
+        # children.classroom_id is ON DELETE SET NULL and staff_classrooms
+        # is ON DELETE CASCADE (see the migrations) — the database handles
+        # both side effects on its own, nothing to clean up manually here.
+        with self.engine.begin() as connection:
+            result = connection.execute(text("""
+                delete from classrooms where id = :id and institution_id = :institution
+            """), {"id": classroom_id, "institution": institution_id})
+        return result.rowcount > 0
+
     # ---------------------------------------------------------------- children
     def create_child(self, institution_id: str, first_name: str, last_name: str, birth_date: str | None, classroom_id: str | None) -> dict[str, Any]:
         assert self.engine

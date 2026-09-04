@@ -31,6 +31,11 @@ class ClassroomCreate(BaseModel):
     age_group: str | None = Field(default=None, max_length=40)
 
 
+class ClassroomUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    age_group: str | None = Field(default=None, max_length=40)
+
+
 class ChildCreate(BaseModel):
     first_name: str = Field(min_length=1, max_length=80)
     last_name: str = Field(min_length=1, max_length=80)
