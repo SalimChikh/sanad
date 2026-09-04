@@ -11,6 +11,13 @@ class BootstrapRequest(BaseModel):
 class StaffInviteCreate(BaseModel):
     email: EmailStr
     role: str = Field(default="educator", pattern=r"^(owner|educator)$")
+    # Which classes this educator will be scoped to once they accept —
+    # ignored for role="owner" invites (an owner is never restricted).
+    classroom_ids: list[str] = Field(default_factory=list)
+
+
+class StaffClassroomsUpdate(BaseModel):
+    classroom_ids: list[str] = Field(default_factory=list)
 
 
 class AcceptInvite(BaseModel):

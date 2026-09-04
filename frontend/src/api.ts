@@ -20,13 +20,15 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     const { data } = await authProvider.getSession();
     if (data.session) headers.set("Authorization", `Bearer ${data.session.access_token}`);
   } else {
-    // Demo mode (no Firebase configured): the backend accepts two fixed
-    // bearer tokens (see backend/app/controllers/access.py), one per side
-    // of the product. Flipping localStorage["sanad-demo-role"] to "parent"
-    // in the browser console lets you exercise the parent experience
-    // locally without a second real account — e.g.
-    // localStorage.setItem("sanad-demo-role", "parent") then reload.
-    headers.set("Authorization", `Bearer ${localStorage.getItem("sanad-demo-role") === "parent" ? "demo-parent-token" : "demo-owner-token"}`);
+    // Demo mode (no Firebase configured): the backend accepts three fixed
+    // bearer tokens (see backend/app/controllers/access.py), one per role.
+    // Flipping localStorage["sanad-demo-role"] to "parent" or "educator" in
+    // the browser console lets you exercise that experience locally
+    // without a second real account — e.g.
+    // localStorage.setItem("sanad-demo-role", "educator") then reload.
+    const role = localStorage.getItem("sanad-demo-role");
+    const token = role === "parent" ? "demo-parent-token" : role === "educator" ? "demo-educator-token" : "demo-owner-token";
+    headers.set("Authorization", `Bearer ${token}`);
   }
   const r = await fetch(`${API}${path}`, { ...options, headers });
   if (!r.ok) {

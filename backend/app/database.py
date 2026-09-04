@@ -93,9 +93,14 @@ class DatabaseStore:
         with self.engine.connect() as connection:
             row = connection.execute(text("""
                 select su.user_id, su.role, i.id institution_id, i.name institution_name,
-                       i.type institution_type, i.slug, i.status, i.primary_color, i.logo_url
-                from staff_users su join institutions i on i.id = su.institution_id
-                where su.user_id = :user and su.active limit 1
+                       i.type institution_type, i.slug, i.status, i.primary_color, i.logo_url,
+                       coalesce(array_agg(sc.classroom_id) filter (where sc.classroom_id is not null), '{}') as classroom_ids
+                from staff_users su
+                join institutions i on i.id = su.institution_id
+                left join staff_classrooms sc on sc.user_id = su.user_id and sc.institution_id = su.institution_id
+                where su.user_id = :user and su.active
+                group by su.user_id, su.role, i.id, i.name, i.type, i.slug, i.status, i.primary_color, i.logo_url
+                limit 1
             """), {"user": user_id}).mappings().first()
         if not row:
             return None
@@ -127,23 +132,46 @@ class DatabaseStore:
         assert self.engine
         with self.engine.connect() as connection:
             rows = connection.execute(text("""
-                select su.user_id, su.institution_id, su.role, su.active, su.created_at, au.email, au.full_name
-                from staff_users su join app_users au on au.id = su.user_id
+                select su.user_id, su.institution_id, su.role, su.active, su.created_at, au.email, au.full_name,
+                       coalesce(array_agg(sc.classroom_id) filter (where sc.classroom_id is not null), '{}') as classroom_ids
+                from staff_users su
+                join app_users au on au.id = su.user_id
+                left join staff_classrooms sc on sc.user_id = su.user_id and sc.institution_id = su.institution_id
                 where su.institution_id = :institution
+                group by su.user_id, su.institution_id, su.role, su.active, su.created_at, au.email, au.full_name
             """), {"institution": institution_id}).mappings()
             return _list(rows)
 
-    def create_staff_invite(self, institution_id: str, email: str, role: str, created_by: str) -> dict[str, Any]:
+    def update_staff_classrooms(self, institution_id: str, user_id: str, classroom_ids: list[str]) -> bool:
+        assert self.engine
+        with self.engine.begin() as connection:
+            exists = connection.execute(text("""
+                select 1 from staff_users where user_id = :user and institution_id = :institution and active
+            """), {"user": user_id, "institution": institution_id}).first()
+            if not exists:
+                return False
+            connection.execute(text("""
+                delete from staff_classrooms where user_id = :user and institution_id = :institution
+            """), {"user": user_id, "institution": institution_id})
+            for classroom_id in classroom_ids:
+                connection.execute(text("""
+                    insert into staff_classrooms(user_id, institution_id, classroom_id)
+                    values (:user, :institution, :classroom)
+                """), {"user": user_id, "institution": institution_id, "classroom": classroom_id})
+        return True
+
+    def create_staff_invite(self, institution_id: str, email: str, role: str, created_by: str, classroom_ids: list[str] | None = None) -> dict[str, Any]:
         assert self.engine
         with self.engine.begin() as connection:
             row = connection.execute(text("""
-                insert into staff_invites(institution_id, email, role, token, created_by, expires_at)
-                values (:institution, lower(:email), :role, :token, :created_by, :expires_at)
-                returning id, institution_id, email, role, token, created_by, created_at, expires_at, accepted_at
+                insert into staff_invites(institution_id, email, role, token, created_by, expires_at, classroom_ids)
+                values (:institution, lower(:email), :role, :token, :created_by, :expires_at, :classroom_ids)
+                returning id, institution_id, email, role, token, created_by, created_at, expires_at, accepted_at, classroom_ids
             """), {
                 "institution": institution_id, "email": email.strip(), "role": role,
                 "token": secrets.token_urlsafe(24), "created_by": created_by,
                 "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+                "classroom_ids": classroom_ids or [],
             }).mappings().one()
         return _dict(row) or {}
 
@@ -169,7 +197,7 @@ class DatabaseStore:
             invite = connection.execute(text("""
                 update staff_invites set accepted_at = now()
                 where token = :token and accepted_at is null
-                returning institution_id, role
+                returning institution_id, role, classroom_ids
             """), {"token": token}).mappings().first()
             if not invite:
                 return None
@@ -177,6 +205,12 @@ class DatabaseStore:
                 insert into staff_users(user_id, institution_id, role) values (:user, :institution, :role)
                 on conflict (user_id, institution_id) do update set role = excluded.role, active = true
             """), {"user": user_id, "institution": invite["institution_id"], "role": invite["role"]})
+            for classroom_id in invite["classroom_ids"] or []:
+                connection.execute(text("""
+                    insert into staff_classrooms(user_id, institution_id, classroom_id)
+                    values (:user, :institution, :classroom)
+                    on conflict do nothing
+                """), {"user": user_id, "institution": invite["institution_id"], "classroom": classroom_id})
         return self.staff_membership(user_id)
 
     # ---------------------------------------------------------------- classrooms

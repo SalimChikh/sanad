@@ -30,6 +30,8 @@ class AccessController:
             return {"sub": "00000000-0000-0000-0000-000000000001", "email": "owner@sanad.app", "demo": True}
         if demo_enabled and token == "demo-parent-token":
             return {"sub": "00000000-0000-0000-0000-000000000002", "email": "parent@sanad.app", "demo": True}
+        if demo_enabled and token == "demo-educator-token":
+            return {"sub": "00000000-0000-0000-0000-000000000003", "email": "educator@sanad.app", "demo": True}
         if not self.auth:
             raise HTTPException(401, "Le fournisseur d'authentification n'est pas configuré")
         try:

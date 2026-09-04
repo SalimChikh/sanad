@@ -60,16 +60,36 @@ def _owner(authorization: str | None) -> dict[str, Any]:
     return member
 
 
+def staff_can_access_child(membership: dict[str, Any], child: dict[str, Any]) -> bool:
+    """An owner sees every child in their institution. An educator is
+    scoped to the classes they were assigned (at invite time, or later via
+    PATCH /staff/{user_id}/classrooms) — a child with no classroom at all
+    is invisible to educators, only the owner can manage them until
+    they're placed in a classroom."""
+    if membership["institution_id"] != child["institution_id"]:
+        return False
+    if membership["role"] == "owner":
+        return True
+    return child["classroom_id"] in (membership.get("classroom_ids") or [])
+
+
 def require_child_access(authorization: str | None, child_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """A caller may see a child's feed either as staff of that child's
-    institution, or as a linked parent — never both checks skipped."""
+    institution (subject to classroom scoping for an educator), or as a
+    linked parent — never both checks skipped."""
     user = _identity(authorization)
     child = store.child(child_id)
     if not child:
         raise HTTPException(404, "Enfant introuvable")
     membership = store.staff_membership(user["id"])
     if membership and membership["institution_id"] == child["institution_id"]:
-        return user, child
+        if staff_can_access_child(membership, child):
+            return user, child
+        # Same institution, wrong classroom for this educator — 404 rather
+        # than 403, consistent with every other classroom-scope check in
+        # this router group (see children.py): doesn't confirm to an
+        # educator that a specific child exists outside their classes.
+        raise HTTPException(404, "Enfant introuvable")
     if store.is_parent_of(user["id"], child_id):
         return user, child
     raise HTTPException(403, "Accès refusé à cet enfant")

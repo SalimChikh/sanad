@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Header, HTTPException
 
 from app.models.schemas import CommentCreate, PostCreate
-from app.state import _staff, require_child_access, store
+from app.state import _staff, require_child_access, staff_can_access_child, store
 
 router = APIRouter()
 
@@ -17,6 +17,8 @@ def feed(child_id: str | None = None, authorization: str | None = Header(default
         _user, _child = require_child_access(authorization, child_id)
         posts = store.feed_for_child(child_id)
     else:
+        # Institution-wide feed (announcements) stays readable by any staff
+        # regardless of classroom — only *posting* one is owner-only, below.
         member = _staff(authorization)
         posts = store.feed_for_institution(member["institution_id"])
     return [_with_author(post) for post in posts]
@@ -27,8 +29,12 @@ def create_post(body: PostCreate, authorization: str | None = Header(default=Non
     member = _staff(authorization)
     if body.child_id:
         child = store.child(body.child_id)
-        if not child or child["institution_id"] != member["institution_id"]:
+        if not child or not staff_can_access_child(member, child):
             raise HTTPException(404, "Enfant introuvable")
+    elif member["role"] != "owner":
+        # No child_id = an institution-wide announcement — that's the
+        # owner's call to make, not scoped to any one educator's classes.
+        raise HTTPException(403, "Seul le propriétaire peut publier une annonce pour tout l'établissement")
     post = store.create_post(
         member["institution_id"], member["user_id"], body.type,
         child_id=body.child_id, classroom_id=body.classroom_id,
@@ -43,6 +49,10 @@ def delete_post(post_id: str, authorization: str | None = Header(default=None)):
     post = store.post(post_id)
     if not post or post["institution_id"] != member["institution_id"]:
         raise HTTPException(404, "Publication introuvable")
+    if member["role"] != "owner":
+        child = store.child(post["child_id"]) if post["child_id"] else None
+        if not child or not staff_can_access_child(member, child):
+            raise HTTPException(403, "Cette publication n'est pas dans vos classes assignées")
     store.delete_post(post_id)
 
 

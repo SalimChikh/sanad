@@ -78,6 +78,10 @@ class Store:
                     "institution_id": inst["id"], "institution_name": inst["name"],
                     "institution_type": inst["type"], "slug": inst["slug"], "status": inst["status"],
                     "primary_color": inst["primary_color"], "logo_url": inst["logo_url"],
+                    # Only meaningful for educators — an owner is always
+                    # unrestricted regardless of what's stored here (every
+                    # caller checks role == "owner" before consulting this).
+                    "classroom_ids": rec.get("classroom_ids", []),
                 }
         return None
 
@@ -93,7 +97,10 @@ class Store:
         }
         self.institutions[inst_id] = institution
         staff_id = _uid()
-        self.staff[staff_id] = {"id": staff_id, "user_id": user_id, "institution_id": inst_id, "role": "owner", "active": True, "created_at": _now()}
+        self.staff[staff_id] = {
+            "id": staff_id, "user_id": user_id, "institution_id": inst_id, "role": "owner",
+            "active": True, "created_at": _now(), "classroom_ids": [],
+        }
         return self.staff_membership(user_id)  # type: ignore[return-value]
 
     def institution_staff(self, institution_id: str) -> list[dict[str, Any]]:
@@ -104,12 +111,20 @@ class Store:
                 out.append({**rec, "email": user.get("email"), "full_name": user.get("full_name")})
         return out
 
-    def create_staff_invite(self, institution_id: str, email: str, role: Role, created_by: str) -> dict[str, Any]:
+    def update_staff_classrooms(self, institution_id: str, user_id: str, classroom_ids: list[str]) -> bool:
+        for rec in self.staff.values():
+            if rec["institution_id"] == institution_id and rec["user_id"] == user_id and rec["active"]:
+                rec["classroom_ids"] = classroom_ids
+                return True
+        return False
+
+    def create_staff_invite(self, institution_id: str, email: str, role: Role, created_by: str, classroom_ids: list[str] | None = None) -> dict[str, Any]:
         invite_id = _uid()
         invite = {
             "id": invite_id, "institution_id": institution_id, "email": email.strip().lower(), "role": role,
             "token": secrets.token_urlsafe(24), "created_by": created_by, "created_at": _now(),
             "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(), "accepted_at": None,
+            "classroom_ids": classroom_ids or [],
         }
         self.staff_invites[invite_id] = invite
         return invite
@@ -129,11 +144,25 @@ class Store:
         if not invite:
             return None
         invite["accepted_at"] = _now()
-        staff_id = _uid()
-        self.staff[staff_id] = {
-            "id": staff_id, "user_id": user_id, "institution_id": invite["institution_id"],
-            "role": invite["role"], "active": True, "created_at": _now(),
-        }
+        # Update in place if this user is already (or was) staff at this
+        # institution, instead of always inserting a new record — mirrors
+        # DatabaseStore's `on conflict (user_id, institution_id) do update`
+        # and matters as soon as the same person is invited more than once
+        # (role change, or a second batch of classes): staff_membership()
+        # returns the first *active* match it finds, so a stray duplicate
+        # record would silently keep serving stale data forever.
+        existing = next((rec for rec in self.staff.values() if rec["user_id"] == user_id and rec["institution_id"] == invite["institution_id"]), None)
+        if existing:
+            existing["role"] = invite["role"]
+            existing["active"] = True
+            existing["classroom_ids"] = invite.get("classroom_ids", [])
+        else:
+            staff_id = _uid()
+            self.staff[staff_id] = {
+                "id": staff_id, "user_id": user_id, "institution_id": invite["institution_id"],
+                "role": invite["role"], "active": True, "created_at": _now(),
+                "classroom_ids": invite.get("classroom_ids", []),
+            }
         return self.staff_membership(user_id)
 
     # ---------------------------------------------------------------- classrooms
