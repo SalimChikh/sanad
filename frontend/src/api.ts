@@ -128,5 +128,5 @@ export type CalendarEvent = {
   all_day: boolean;
 };
 
-export type StaffInvite = { id: string; email: string; role: "owner" | "educator"; token: string };
-export type StaffMember = { user_id: string; role: "owner" | "educator"; email?: string; full_name?: string };
+export type StaffInvite = { id: string; email: string; role: "owner" | "educator"; token: string; classroom_ids?: string[] };
+export type StaffMember = { user_id: string; role: "owner" | "educator"; email?: string; full_name?: string; classroom_ids?: string[] };

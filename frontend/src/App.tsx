@@ -358,6 +358,12 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
     }
   }
 
+  async function remove(childId: string) {
+    if (!window.confirm(t("Retirer cet enfant ? Son historique est conservé."))) return;
+    await request(`/children/${childId}`, { method: "PATCH", body: JSON.stringify({ active: false }) });
+    void load();
+  }
+
   return (
     <div className="page">
       <div className="page-head">
@@ -385,10 +391,13 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
       )}
       <div className="cards-grid">
         {children.map((child) => (
-          <Link className="panel child-card" key={child.id} to={`/app/children/${child.id}`}>
-            <span className="avatar">{child.first_name[0]}</span>
-            <strong>{child.first_name} {child.last_name}</strong>
-          </Link>
+          <div className="panel child-card" key={child.id}>
+            <Link className="child-card-link" to={`/app/children/${child.id}`}>
+              <span className="avatar">{child.first_name[0]}</span>
+              <strong>{child.first_name} {child.last_name}</strong>
+            </Link>
+            <button type="button" className="text-link small" onClick={() => remove(child.id)}>{t("Retirer")}</button>
+          </div>
         ))}
         {!children.length && <p className="empty">{t("Aucun enfant pour l’instant.")}</p>}
       </div>
@@ -897,10 +906,25 @@ function TeamPage() {
   const { t } = useLang();
   const [members, setMembers] = useState<StaffMember[]>([]);
   const [invites, setInvites] = useState<StaffInvite[]>([]);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [role, setRole] = useState<"educator" | "owner">("educator");
+  const [classroomIds, setClassroomIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = () => request<{ members: StaffMember[]; invites: StaffInvite[] }>("/staff").then((r) => { setMembers(r.members); setInvites(r.invites); });
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    void request<Classroom[]>("/classrooms").then(setClassrooms);
+  }, []);
+
+  function classroomNames(ids: string[] | undefined): string {
+    if (!ids || !ids.length) return "";
+    return ids.map((id) => classrooms.find((c) => c.id === id)?.name).filter(Boolean).join(", ");
+  }
+
+  function toggleClassroom(id: string) {
+    setClassroomIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -909,8 +933,13 @@ function TeamPage() {
     const formElement = e.currentTarget;
     const data = Object.fromEntries(new FormData(formElement));
     try {
-      await request("/staff/invites", { method: "POST", body: JSON.stringify({ email: data.email, role: data.role }) });
+      await request("/staff/invites", {
+        method: "POST",
+        body: JSON.stringify({ email: data.email, role: data.role, classroom_ids: role === "educator" ? classroomIds : [] }),
+      });
       formElement.reset();
+      setClassroomIds([]);
+      setRole("educator");
       void load();
     } catch (e) {
       setError((e as Error).message);
@@ -926,23 +955,46 @@ function TeamPage() {
         <label>{t("Adresse courriel")}<input name="email" type="email" required /></label>
         <label>
           {t("Rôle")}
-          <select name="role" defaultValue="educator">
+          <select name="role" value={role} onChange={(e) => setRole(e.target.value as "educator" | "owner")}>
             <option value="educator">{t("Éducateur/trice")}</option>
             <option value="owner">{t("Propriétaire")}</option>
           </select>
         </label>
+        {role === "educator" && (
+          <fieldset className="classroom-picker">
+            <legend>{t("Classes assignées")}</legend>
+            {classrooms.map((c) => (
+              <label key={c.id} className="check">
+                <input type="checkbox" checked={classroomIds.includes(c.id)} onChange={() => toggleClassroom(c.id)} />
+                {c.name}
+              </label>
+            ))}
+            {!classrooms.length && <p className="empty small">{t("Aucune classe pour l’instant.")}</p>}
+          </fieldset>
+        )}
         {error && <p className="error">{error}</p>}
         <button className="button" disabled={busy}>{t("Inviter un membre du personnel")}</button>
       </form>
       <h3>{t("Membres")}</h3>
       <div className="cards-grid">
-        {members.map((m) => <div className="panel" key={m.user_id}><strong>{m.full_name || m.email}</strong><p>{t(m.role === "owner" ? "Propriétaire" : "Éducateur/trice")}</p></div>)}
+        {members.map((m) => (
+          <div className="panel" key={m.user_id}>
+            <strong>{m.full_name || m.email}</strong>
+            <p>{t(m.role === "owner" ? "Propriétaire" : "Éducateur/trice")}</p>
+            {m.role === "educator" && <p className="empty small">{classroomNames(m.classroom_ids) || t("Aucune classe assignée")}</p>}
+          </div>
+        ))}
       </div>
       {invites.length > 0 && (
         <>
           <h3>{t("Invitations en attente")}</h3>
           <div className="cards-grid">
-            {invites.map((i) => <div className="panel" key={i.id}><strong>{i.email}</strong></div>)}
+            {invites.map((i) => (
+              <div className="panel" key={i.id}>
+                <strong>{i.email}</strong>
+                {i.role === "educator" && <p className="empty small">{classroomNames(i.classroom_ids) || t("Aucune classe assignée")}</p>}
+              </div>
+            ))}
           </div>
         </>
       )}
