@@ -1359,7 +1359,7 @@ function TeamPage() {
           <h3>{t("Invitations en attente")}</h3>
           <div className="cards-grid">
             {invites.map((i) => (
-              <div className={`panel${i.id === justCreatedId ? " invite-highlight" : ""}`} key={i.id}>
+              <div className={`panel invite-card${i.id === justCreatedId ? " invite-highlight" : ""}`} key={i.id}>
                 <strong>{i.email}</strong>
                 {i.role === "educator" && <p className="empty small">{classroomNames(i.classroom_ids) || t("Aucune classe assignée")}</p>}
                 {i.id === justCreatedId && (

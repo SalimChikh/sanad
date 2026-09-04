@@ -171,6 +171,7 @@ a.panel:hover { border-color: var(--green-light); }
 }
 .inline-form textarea { height: auto; min-height: 60px; min-width: 240px; }
 .inline-form .check { flex-direction: row; align-items: center; gap: 6px; }
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); }
 .form-actions { display: flex; gap: 10px; }
 
 .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
@@ -181,9 +182,14 @@ a.panel:hover { border-color: var(--green-light); }
 .status-badge.active { background: #eef3ea; color: var(--green); }
 .status-badge.inactive { background: #f3e8e6; color: var(--danger); }
 
-.classroom-picker { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.classroom-picker {
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  width: fit-content; max-width: 100%;
+}
 .classroom-picker legend { font-size: 0.8rem; font-weight: 600; padding: 0 4px; }
-.classroom-picker .check { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; }
+.classroom-picker .check { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; white-space: nowrap; }
+.classroom-picker .check input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--green); flex-shrink: 0; }
 .avatar {
   width: 44px; height: 44px; border-radius: 50%;
   background: var(--green); color: #fff;
@@ -267,8 +273,12 @@ a.panel:hover { border-color: var(--green-light); }
 .comment-form { display: flex; gap: 8px; }
 .comment-form input { flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-family: var(--font); }
 
-.copy-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-.copy-row code { background: var(--bg); padding: 6px 10px; border-radius: 6px; flex: 1; overflow-wrap: anywhere; font-size: 0.8rem; }
+.copy-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; min-width: 0; }
+.copy-row code {
+  background: var(--bg); padding: 6px 10px; border-radius: 6px; font-size: 0.8rem;
+  flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.invite-card { grid-column: 1 / -1; }
 .invite-highlight { border-color: var(--green); border-width: 2px; }
 
 .event-list { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
