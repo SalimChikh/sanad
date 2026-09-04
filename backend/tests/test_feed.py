@@ -9,7 +9,7 @@ PARENT = {"Authorization": "Bearer demo-parent-token"}
 
 def _child_with_linked_parent(first_name: str) -> dict:
     client.post("/api/v1/auth/bootstrap", json={"institution_name": "Garderie Les Oliviers", "institution_type": "daycare"}, headers=OWNER)
-    child = client.post("/api/v1/children", json={"first_name": first_name, "last_name": "Test"}, headers=OWNER).json()
+    child = client.post("/api/v1/children", json={"first_name": first_name, "last_name": "Test", "birth_date": "2022-01-01"}, headers=OWNER).json()
     invite = client.post(f"/api/v1/children/{child['id']}/parent-invites", json={
         "email": f"{first_name.lower()}.parent@example.com", "relationship": "father",
     }, headers=OWNER).json()

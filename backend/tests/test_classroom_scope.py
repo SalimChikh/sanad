@@ -19,8 +19,8 @@ def _setup():
     }, headers=OWNER).json()
     client.post("/api/v1/auth/accept-staff-invite", json={"token": invite["token"]}, headers=EDUCATOR)
 
-    child_in_a = client.post("/api/v1/children", json={"first_name": "DansA", "last_name": "Test", "classroom_id": classroom_a["id"]}, headers=OWNER).json()
-    child_in_b = client.post("/api/v1/children", json={"first_name": "DansB", "last_name": "Test", "classroom_id": classroom_b["id"]}, headers=OWNER).json()
+    child_in_a = client.post("/api/v1/children", json={"first_name": "DansA", "last_name": "Test", "birth_date": "2022-01-01", "classroom_id": classroom_a["id"]}, headers=OWNER).json()
+    child_in_b = client.post("/api/v1/children", json={"first_name": "DansB", "last_name": "Test", "birth_date": "2022-01-01", "classroom_id": classroom_b["id"]}, headers=OWNER).json()
     return classroom_a, classroom_b, child_in_a, child_in_b
 
 
@@ -67,10 +67,10 @@ def test_owner_can_create_an_institution_wide_announcement():
 
 def test_educator_cannot_add_a_child_outside_their_classroom():
     classroom_a, classroom_b, _child_in_a, _child_in_b = _setup()
-    blocked = client.post("/api/v1/children", json={"first_name": "Nouvel", "last_name": "Enfant", "classroom_id": classroom_b["id"]}, headers=EDUCATOR)
+    blocked = client.post("/api/v1/children", json={"first_name": "Nouvel", "last_name": "Enfant", "birth_date": "2022-01-01", "classroom_id": classroom_b["id"]}, headers=EDUCATOR)
     assert blocked.status_code == 403
 
-    allowed = client.post("/api/v1/children", json={"first_name": "Nouvel", "last_name": "Enfant", "classroom_id": classroom_a["id"]}, headers=EDUCATOR)
+    allowed = client.post("/api/v1/children", json={"first_name": "Nouvel", "last_name": "Enfant", "birth_date": "2022-01-01", "classroom_id": classroom_a["id"]}, headers=EDUCATOR)
     assert allowed.status_code == 201
 
 

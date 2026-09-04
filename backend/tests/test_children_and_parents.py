@@ -15,23 +15,65 @@ def test_create_classroom_and_child():
     _ensure_institution()
     classroom = client.post("/api/v1/classrooms", json={"name": "Petits (2-3 ans)", "age_group": "2-3"}, headers=OWNER).json()
     child = client.post("/api/v1/children", json={
-        "first_name": "Amine", "last_name": "Belkacem", "classroom_id": classroom["id"],
+        "first_name": "Amine", "last_name": "Belkacem", "birth_date": "2022-01-01", "classroom_id": classroom["id"],
     }, headers=OWNER).json()
     assert child["classroom_id"] == classroom["id"]
     children = client.get("/api/v1/children", headers=OWNER).json()
     assert any(c["id"] == child["id"] for c in children)
 
 
+def test_birth_date_is_required():
+    _ensure_institution()
+    response = client.post("/api/v1/children", json={"first_name": "SansDate", "last_name": "Test"}, headers=OWNER)
+    assert response.status_code == 422
+
+
+def test_birth_date_in_the_future_is_rejected():
+    _ensure_institution()
+    response = client.post("/api/v1/children", json={"first_name": "Futur", "last_name": "Test", "birth_date": "2099-01-01"}, headers=OWNER)
+    assert response.status_code == 422
+
+
+def test_blank_first_name_is_rejected():
+    _ensure_institution()
+    response = client.post("/api/v1/children", json={"first_name": "   ", "last_name": "Test", "birth_date": "2022-01-01"}, headers=OWNER)
+    assert response.status_code == 422
+
+
+def test_reactivating_a_child_puts_them_back_in_the_default_listing():
+    _ensure_institution()
+    child = client.post("/api/v1/children", json={"first_name": "ToggleTest", "last_name": "Enfant", "birth_date": "2022-01-01"}, headers=OWNER).json()
+
+    client.patch(f"/api/v1/children/{child['id']}", json={"active": False}, headers=OWNER)
+    assert not any(c["id"] == child["id"] for c in client.get("/api/v1/children", headers=OWNER).json())
+
+    reactivated = client.patch(f"/api/v1/children/{child['id']}", json={"active": True}, headers=OWNER)
+    assert reactivated.json()["active"] is True
+    assert any(c["id"] == child["id"] for c in client.get("/api/v1/children", headers=OWNER).json())
+
+
+def test_include_inactive_shows_deactivated_children_too():
+    _ensure_institution()
+    child = client.post("/api/v1/children", json={"first_name": "IncludeInactive", "last_name": "Test", "birth_date": "2022-01-01"}, headers=OWNER).json()
+    client.patch(f"/api/v1/children/{child['id']}", json={"active": False}, headers=OWNER)
+
+    default_list = client.get("/api/v1/children", headers=OWNER).json()
+    assert not any(c["id"] == child["id"] for c in default_list)
+
+    with_inactive = client.get("/api/v1/children?include_inactive=true", headers=OWNER).json()
+    assert any(c["id"] == child["id"] and c["active"] is False for c in with_inactive)
+
+
 def test_update_child():
     _ensure_institution()
-    child = client.post("/api/v1/children", json={"first_name": "Yasmine", "last_name": "Cherif"}, headers=OWNER).json()
+    child = client.post("/api/v1/children", json={"first_name": "Yasmine", "last_name": "Cherif", "birth_date": "2022-01-01"}, headers=OWNER).json()
     updated = client.patch(f"/api/v1/children/{child['id']}", json={"notes": "Allergique aux arachides"}, headers=OWNER).json()
     assert updated["notes"] == "Allergique aux arachides"
 
 
 def test_parent_invite_accept_and_visibility():
     _ensure_institution()
-    child = client.post("/api/v1/children", json={"first_name": "Nadia", "last_name": "Haddad"}, headers=OWNER).json()
+    child = client.post("/api/v1/children", json={"first_name": "Nadia", "last_name": "Haddad", "birth_date": "2022-01-01"}, headers=OWNER).json()
 
     invite = client.post(f"/api/v1/children/{child['id']}/parent-invites", json={
         "email": "parent@example.com", "relationship": "mother",
@@ -55,7 +97,7 @@ def test_parent_invite_accept_and_visibility():
 
 def test_child_access_denied_to_unrelated_parent():
     _ensure_institution()
-    child = client.post("/api/v1/children", json={"first_name": "Karim", "last_name": "Belaid"}, headers=OWNER).json()
+    child = client.post("/api/v1/children", json={"first_name": "Karim", "last_name": "Belaid", "birth_date": "2022-01-01"}, headers=OWNER).json()
     # This parent was never invited for this specific child — require_child_access
     # must reject both the child record itself and its feed.
     assert client.get(f"/api/v1/children/{child['id']}", headers=PARENT).status_code == 403

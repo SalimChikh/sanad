@@ -246,7 +246,7 @@ class DatabaseStore:
             }).mappings().one()
         return _dict(row) or {}
 
-    def list_children(self, institution_id: str, classroom_id: str | None = None) -> list[dict[str, Any]]:
+    def list_children(self, institution_id: str, classroom_id: str | None = None, include_inactive: bool = False) -> list[dict[str, Any]]:
         assert self.engine
         with self.engine.connect() as connection:
             # Cast the parameter explicitly: passed as NULL when no filter is
@@ -255,10 +255,10 @@ class DatabaseStore:
             # "AmbiguousParameter" — a plain direct connection tends to
             # infer it from context and hide the same underlying issue).
             rows = connection.execute(text("""
-                select * from children where institution_id = :institution and active
+                select * from children where institution_id = :institution and (:include_inactive or active)
                   and (cast(:classroom as uuid) is null or classroom_id = cast(:classroom as uuid))
                 order by first_name
-            """), {"institution": institution_id, "classroom": classroom_id}).mappings()
+            """), {"institution": institution_id, "classroom": classroom_id, "include_inactive": include_inactive}).mappings()
             return _list(rows)
 
     def child(self, child_id: str) -> dict[str, Any] | None:

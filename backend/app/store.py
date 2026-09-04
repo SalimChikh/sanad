@@ -186,8 +186,8 @@ class Store:
         self.children[child_id] = child
         return child
 
-    def list_children(self, institution_id: str, classroom_id: str | None = None) -> list[dict[str, Any]]:
-        items = [c for c in self.children.values() if c["institution_id"] == institution_id and c["active"]]
+    def list_children(self, institution_id: str, classroom_id: str | None = None, include_inactive: bool = False) -> list[dict[str, Any]]:
+        items = [c for c in self.children.values() if c["institution_id"] == institution_id and (include_inactive or c["active"])]
         if classroom_id:
             items = [c for c in items if c["classroom_id"] == classroom_id]
         return sorted(items, key=lambda c: c["first_name"])

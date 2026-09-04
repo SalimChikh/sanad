@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr, Field
+from datetime import date
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class BootstrapRequest(BaseModel):
@@ -32,14 +34,32 @@ class ClassroomCreate(BaseModel):
 class ChildCreate(BaseModel):
     first_name: str = Field(min_length=1, max_length=80)
     last_name: str = Field(min_length=1, max_length=80)
-    birth_date: str | None = None
+    # A real calendar date, and required — a child's birth date is core to
+    # what the app is for (age groups, per-child records), and a plain
+    # `str | None` let " " or "31/02/2026" through silently before this.
+    birth_date: date
     classroom_id: str | None = None
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Ce champ ne peut pas être vide.")
+        return stripped
+
+    @field_validator("birth_date")
+    @classmethod
+    def _not_in_the_future(cls, value: date) -> date:
+        if value > date.today():
+            raise ValueError("La date de naissance ne peut pas être dans le futur.")
+        return value
 
 
 class ChildUpdate(BaseModel):
     first_name: str | None = Field(default=None, min_length=1, max_length=80)
     last_name: str | None = Field(default=None, min_length=1, max_length=80)
-    birth_date: str | None = None
+    birth_date: date | None = None
     classroom_id: str | None = None
     notes: str | None = Field(default=None, max_length=2000)
     photo_url: str | None = None

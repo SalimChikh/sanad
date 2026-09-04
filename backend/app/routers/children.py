@@ -7,9 +7,9 @@ router = APIRouter()
 
 
 @router.get("/api/v1/children")
-def list_children(classroom_id: str | None = None, authorization: str | None = Header(default=None)):
+def list_children(classroom_id: str | None = None, include_inactive: bool = False, authorization: str | None = Header(default=None)):
     member = _staff(authorization)
-    children = store.list_children(member["institution_id"], classroom_id)
+    children = store.list_children(member["institution_id"], classroom_id, include_inactive)
     if member["role"] != "owner":
         allowed = set(member.get("classroom_ids") or [])
         children = [c for c in children if c["classroom_id"] in allowed]

@@ -36,7 +36,7 @@ def test_linked_parent_sees_their_childs_institution_calendar_without_child_id()
     # staff membership, so the parent-side /app/calendar route 403'd for
     # every parent — a parent is never staff.
     _ensure_institution()
-    child = client.post("/api/v1/children", json={"first_name": "Calendrier", "last_name": "Enfant"}, headers=OWNER).json()
+    child = client.post("/api/v1/children", json={"first_name": "Calendrier", "last_name": "Enfant", "birth_date": "2022-01-01"}, headers=OWNER).json()
     invite = client.post(f"/api/v1/children/{child['id']}/parent-invites", json={
         "email": "calendrier.parent@example.com", "relationship": "mother",
     }, headers=OWNER).json()
