@@ -268,6 +268,7 @@ function StaffShell({ member }: { member: Member & { kind: "staff" } }) {
           <Route path="children" element={<ChildrenList institutionId={member.institution_id} />} />
           <Route path="children/:childId" element={<ChildDetail canPost />} />
           <Route path="classrooms" element={<ClassroomsPage institutionId={member.institution_id} />} />
+          <Route path="classrooms/:classroomId" element={<ClassroomDetail isOwner={member.role === "owner"} />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="team" element={<TeamPage />} />
         </Routes>
@@ -860,15 +861,142 @@ function ClassroomsPage({ institutionId }: { institutionId: string }) {
       </form>
       <div className="cards-grid">
         {classrooms.map((c) => (
-          <div className="panel" key={c.id}>
+          <Link className="panel" key={c.id} to={`/app/classrooms/${c.id}`}>
             <strong>{c.name}</strong>
             {c.age_group && <p>{c.age_group}</p>}
-          </div>
+          </Link>
         ))}
         {loading && <p className="empty">{t("Chargement…")}</p>}
         {!loading && !classrooms.length && <p className="empty">{t("Aucune classe pour l’instant.")}</p>}
       </div>
       {institutionId && null}
+    </div>
+  );
+}
+
+function ClassroomDetail({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLang();
+  const nav = useNavigate();
+  const { classroomId } = useParams();
+  const [classroom, setClassroom] = useState<Classroom | null>(null);
+  const [children, setChildren] = useState<Child[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editOpen, setEditOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [c, kids, staffResult] = await Promise.all([
+        request<Classroom>(`/classrooms/${classroomId}`),
+        request<Child[]>(`/children?classroom_id=${classroomId}`),
+        request<{ members: StaffMember[] }>("/staff"),
+      ]);
+      setClassroom(c);
+      setChildren(kids);
+      setStaff(staffResult.members.filter((m) => m.role === "educator"));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { void load(); }, [classroomId]);
+
+  async function saveEdit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    setBusy(true);
+    setError("");
+    try {
+      const updated = await request<Classroom>(`/classrooms/${classroomId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: data.name, age_group: data.age_group || null }),
+      });
+      setClassroom(updated);
+      setEditOpen(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleEducator(member: StaffMember) {
+    const assigned = (member.classroom_ids ?? []).includes(classroomId!);
+    const nextIds = assigned
+      ? (member.classroom_ids ?? []).filter((id) => id !== classroomId)
+      : [...(member.classroom_ids ?? []), classroomId!];
+    await request(`/staff/${member.user_id}/classrooms`, { method: "PATCH", body: JSON.stringify({ classroom_ids: nextIds }) });
+    void load();
+  }
+
+  async function removeClassroom() {
+    if (!window.confirm(t("Supprimer cette classe ? Les enfants et le personnel assignés seront simplement désassignés."))) return;
+    await request(`/classrooms/${classroomId}`, { method: "DELETE" });
+    nav("/app/classrooms");
+  }
+
+  if (loading || !classroom) return <div className="page"><p className="empty">{t("Chargement…")}</p></div>;
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <Link className="text-link" to="/app/classrooms">{t("Retour")}</Link>
+          <h1>{classroom.name}</h1>
+          {classroom.age_group && <p className="empty small">{classroom.age_group}</p>}
+        </div>
+        <div className="form-actions">
+          <button type="button" className="button secondary" onClick={() => setEditOpen((v) => !v)}>{t("Modifier")}</button>
+          {isOwner && <button type="button" className="button secondary" onClick={removeClassroom}>{t("Supprimer")}</button>}
+        </div>
+      </div>
+
+      {editOpen && (
+        <form className="panel inline-form" onSubmit={saveEdit}>
+          <label>{t("Nom de la classe")}<input name="name" defaultValue={classroom.name} required /></label>
+          <label>{t("Groupe d’âge")}<input name="age_group" defaultValue={classroom.age_group ?? ""} placeholder={t("Ex. 2-3 ans")} /></label>
+          {error && <p className="error">{error}</p>}
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={() => setEditOpen(false)}>{t("Annuler")}</button>
+            <button className="button" disabled={busy}>{t("Enregistrer")}</button>
+          </div>
+        </form>
+      )}
+
+      <h3>{t("Enfants")}</h3>
+      <div className="cards-grid">
+        {children.map((child) => (
+          <Link className="panel child-card" key={child.id} to={`/app/children/${child.id}`}>
+            <span className="avatar">{child.first_name[0]}</span>
+            <strong>{child.first_name} {child.last_name}</strong>
+          </Link>
+        ))}
+        {!children.length && <p className="empty">{t("Aucun enfant pour l’instant.")}</p>}
+      </div>
+
+      <h3>{t("Personnel assigné")}</h3>
+      <div className="cards-grid">
+        {staff.map((member) => {
+          const assigned = (member.classroom_ids ?? []).includes(classroomId!);
+          return (
+            <div className="panel" key={member.user_id}>
+              <strong>{member.full_name || member.email}</strong>
+              {isOwner ? (
+                <button type="button" className="text-link small" onClick={() => toggleEducator(member)}>
+                  {assigned ? t("Retirer de cette classe") : t("Assigner à cette classe")}
+                </button>
+              ) : (
+                <p className="empty small">{assigned ? t("Assigné à cette classe") : t("Non assigné")}</p>
+              )}
+            </div>
+          );
+        })}
+        {!staff.length && <p className="empty">{t("Aucun éducateur/trice pour l’instant.")}</p>}
+      </div>
     </div>
   );
 }
