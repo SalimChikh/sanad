@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildMonthGrid, CalendarPage, dayKey } from "./App";
@@ -66,13 +66,16 @@ describe("CalendarPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Nouvel événement" }));
     await user.type(screen.getByLabelText("Titre"), "Réunion parents");
-    await user.type(screen.getByLabelText("Date et heure de début"), "2026-10-05T09:00");
-
-    vi.mocked(api.request).mockResolvedValueOnce(undefined).mockResolvedValueOnce([]);
+    // The field ships pre-filled with today's date (see defaultStartAt in
+    // App.tsx) — userEvent.type() would append to that instead of
+    // replacing it, producing a malformed datetime-local value that fails
+    // HTML5 validation and silently blocks submission. fireEvent.change
+    // sets it directly.
+    fireEvent.change(screen.getByLabelText("Date et heure de début"), { target: { value: "2026-10-05T09:00" } });
     await user.click(screen.getByRole("button", { name: "Ajouter" }));
 
     await waitFor(() => {
-      const postCall = vi.mocked(api.request).mock.calls.find(([path]) => path === "/calendar-events");
+      const postCall = vi.mocked(api.request).mock.calls.find(([, opts]) => opts?.method === "POST");
       expect(postCall).toBeTruthy();
     });
     const [, options] = vi.mocked(api.request).mock.calls.find(([, opts]) => opts?.method === "POST")!;
@@ -90,7 +93,6 @@ describe("CalendarPage", () => {
     render(<LanguageProvider><CalendarPage /></LanguageProvider>);
     await waitFor(() => expect(screen.getByText("À supprimer")).toBeInTheDocument());
 
-    vi.mocked(api.request).mockResolvedValueOnce(undefined).mockResolvedValueOnce([]);
     await act(async () => {
       await user.click(screen.getByRole("button", { name: "Supprimer" }));
     });

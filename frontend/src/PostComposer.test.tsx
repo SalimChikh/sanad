@@ -11,6 +11,11 @@ vi.mock("./api", async () => {
 });
 
 function renderComposer(onPosted = vi.fn()) {
+  // jsdom's default navigator.language is "en-US" — without pinning this,
+  // LanguageProvider's browser-language auto-detection (see i18n.ts) would
+  // render every string in English instead of the French this suite
+  // queries by text/label.
+  localStorage.setItem("sanad-lang", "fr");
   render(
     <LanguageProvider>
       <PostComposer childId="child-1" onPosted={onPosted} />
