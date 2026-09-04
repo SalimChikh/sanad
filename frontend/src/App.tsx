@@ -326,7 +326,7 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const load = () => request<Child[]>("/children").then(setChildren);
+  const load = () => request<Child[]>("/children?include_inactive=true").then(setChildren);
   useEffect(() => {
     void load();
     request<Classroom[]>("/classrooms").then(setClassrooms);
@@ -344,7 +344,7 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
         body: JSON.stringify({
           first_name: data.first_name,
           last_name: data.last_name,
-          birth_date: data.birth_date || null,
+          birth_date: data.birth_date,
           classroom_id: data.classroom_id || null,
         }),
       });
@@ -358,9 +358,10 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
     }
   }
 
-  async function remove(childId: string) {
-    if (!window.confirm(t("Retirer cet enfant ? Son historique est conservé."))) return;
-    await request(`/children/${childId}`, { method: "PATCH", body: JSON.stringify({ active: false }) });
+  async function toggleActive(child: Child) {
+    const next = !child.active;
+    if (!next && !window.confirm(t("Retirer cet enfant ? Son historique est conservé."))) return;
+    await request(`/children/${child.id}`, { method: "PATCH", body: JSON.stringify({ active: next }) });
     void load();
   }
 
@@ -374,7 +375,7 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
         <form className="panel inline-form" onSubmit={submit}>
           <label>{t("Prénom")}<input name="first_name" required /></label>
           <label>{t("Nom")}<input name="last_name" required /></label>
-          <label>{t("Date de naissance")}<input name="birth_date" type="date" /></label>
+          <label>{t("Date de naissance")}<input name="birth_date" type="date" required max={new Date().toISOString().slice(0, 10)} /></label>
           <label>
             {t("Classe")}
             <select name="classroom_id" defaultValue="">
@@ -391,12 +392,17 @@ function ChildrenList({ institutionId }: { institutionId: string }) {
       )}
       <div className="cards-grid">
         {children.map((child) => (
-          <div className="panel child-card" key={child.id}>
+          <div className={`panel child-card${child.active ? "" : " inactive"}`} key={child.id}>
             <Link className="child-card-link" to={`/app/children/${child.id}`}>
               <span className="avatar">{child.first_name[0]}</span>
               <strong>{child.first_name} {child.last_name}</strong>
+              <span className={`badge status-badge ${child.active ? "active" : "inactive"}`}>
+                {child.active ? t("Actif") : t("Inactif")}
+              </span>
             </Link>
-            <button type="button" className="text-link small" onClick={() => remove(child.id)}>{t("Retirer")}</button>
+            <button type="button" className="text-link small" onClick={() => toggleActive(child)}>
+              {child.active ? t("Retirer") : t("Réactiver")}
+            </button>
           </div>
         ))}
         {!children.length && <p className="empty">{t("Aucun enfant pour l’instant.")}</p>}
