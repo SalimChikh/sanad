@@ -65,6 +65,23 @@ class ChildUpdate(BaseModel):
     photo_url: str | None = None
     active: bool | None = None
 
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Ce champ ne peut pas être vide.")
+        return stripped
+
+    @field_validator("birth_date")
+    @classmethod
+    def _not_in_the_future(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("La date de naissance ne peut pas être dans le futur.")
+        return value
+
 
 class ParentInviteCreate(BaseModel):
     email: EmailStr

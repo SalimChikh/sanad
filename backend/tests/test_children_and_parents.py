@@ -71,6 +71,33 @@ def test_update_child():
     assert updated["notes"] == "Allergique aux arachides"
 
 
+def test_update_child_full_enrollment_info():
+    _ensure_institution()
+    classroom = client.post("/api/v1/classrooms", json={"name": "Update Test Classe"}, headers=OWNER).json()
+    child = client.post("/api/v1/children", json={"first_name": "Avant", "last_name": "Nom", "birth_date": "2022-01-01"}, headers=OWNER).json()
+
+    updated = client.patch(f"/api/v1/children/{child['id']}", json={
+        "first_name": "Après", "last_name": "Nouveau", "birth_date": "2021-06-15", "classroom_id": classroom["id"],
+    }, headers=OWNER)
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["first_name"] == "Après"
+    assert body["last_name"] == "Nouveau"
+    assert body["birth_date"] == "2021-06-15"
+    assert body["classroom_id"] == classroom["id"]
+
+
+def test_update_child_rejects_blank_name_and_future_birth_date():
+    _ensure_institution()
+    child = client.post("/api/v1/children", json={"first_name": "Test", "last_name": "Blank", "birth_date": "2022-01-01"}, headers=OWNER).json()
+
+    blank = client.patch(f"/api/v1/children/{child['id']}", json={"first_name": "   "}, headers=OWNER)
+    assert blank.status_code == 422
+
+    future = client.patch(f"/api/v1/children/{child['id']}", json={"birth_date": "2099-01-01"}, headers=OWNER)
+    assert future.status_code == 422
+
+
 def test_parent_invite_accept_and_visibility():
     _ensure_institution()
     child = client.post("/api/v1/children", json={"first_name": "Nadia", "last_name": "Haddad", "birth_date": "2022-01-01"}, headers=OWNER).json()

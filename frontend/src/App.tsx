@@ -441,15 +441,19 @@ function ChildDetail({ canPost }: { canPost: boolean }) {
   const { t, lang } = useLang();
   const { childId } = useParams();
   const [child, setChild] = useState<Child | null>(null);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [error, setError] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
+  const loadChild = () => request<Child>(`/children/${childId}`).then(setChild).catch((e) => setError((e as Error).message));
   const loadFeed = () => request<Post[]>(`/feed?child_id=${childId}`).then(setPosts).catch((e) => setError((e as Error).message));
   useEffect(() => {
     if (!childId) return;
-    request<Child>(`/children/${childId}`).then(setChild).catch((e) => setError((e as Error).message));
+    void loadChild();
     void loadFeed();
+    if (canPost) request<Classroom[]>("/classrooms").then(setClassrooms);
   }, [childId]);
 
   if (!child) return <div className="page"><p>{t("Chargement…")}</p></div>;
@@ -462,11 +466,24 @@ function ChildDetail({ canPost }: { canPost: boolean }) {
           <h1>{child.first_name} {child.last_name}</h1>
         </div>
         {canPost && (
-          <button type="button" className="button secondary" onClick={() => setInviteOpen((v) => !v)}>
-            {t("Inviter un parent")}
-          </button>
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={() => setEditOpen((v) => !v)}>
+              {t("Modifier")}
+            </button>
+            <button type="button" className="button secondary" onClick={() => setInviteOpen((v) => !v)}>
+              {t("Inviter un parent")}
+            </button>
+          </div>
         )}
       </div>
+      {editOpen && (
+        <EditChildForm
+          child={child}
+          classrooms={classrooms}
+          onSaved={(updated) => { setChild(updated); setEditOpen(false); }}
+          onClose={() => setEditOpen(false)}
+        />
+      )}
       {inviteOpen && childId && <ParentInvitePanel childId={childId} onClose={() => setInviteOpen(false)} />}
       {canPost && childId && <PostComposer childId={childId} onPosted={loadFeed} />}
       {error && <p className="error">{error}</p>}
@@ -475,6 +492,59 @@ function ChildDetail({ canPost }: { canPost: boolean }) {
         {!posts.length && <p className="empty">{t("Aucune publication pour le moment.")}</p>}
       </div>
     </div>
+  );
+}
+
+function EditChildForm({ child, classrooms, onSaved, onClose }: {
+  child: Child; classrooms: Classroom[]; onSaved: (child: Child) => void; onClose: () => void;
+}) {
+  const { t } = useLang();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    try {
+      const updated = await request<Child>(`/children/${child.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          first_name: data.first_name,
+          last_name: data.last_name,
+          birth_date: data.birth_date,
+          classroom_id: data.classroom_id || null,
+          notes: data.notes || null,
+        }),
+      });
+      onSaved(updated);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="panel inline-form" onSubmit={submit}>
+      <label>{t("Prénom")}<input name="first_name" defaultValue={child.first_name} required /></label>
+      <label>{t("Nom")}<input name="last_name" defaultValue={child.last_name} required /></label>
+      <label>{t("Date de naissance")}<input name="birth_date" type="date" defaultValue={child.birth_date ?? ""} required max={new Date().toISOString().slice(0, 10)} /></label>
+      <label>
+        {t("Classe")}
+        <select name="classroom_id" defaultValue={child.classroom_id ?? ""}>
+          <option value="">{t("Aucune classe")}</option>
+          {classrooms.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </label>
+      <label>{t("Notes")}<textarea name="notes" defaultValue={child.notes ?? ""} /></label>
+      {error && <p className="error">{error}</p>}
+      <div className="form-actions">
+        <button type="button" className="button secondary" onClick={onClose}>{t("Annuler")}</button>
+        <button className="button" disabled={busy}>{t("Enregistrer")}</button>
+      </div>
+    </form>
   );
 }
 
