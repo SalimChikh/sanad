@@ -93,20 +93,18 @@ entièrement contre le store en mémoire — aucune base réelle requise.
 
 ## Ce qui manque avant un vrai lancement
 
-- **Base de données réelle** — `app/database.py` existe déjà (voir
-  ci-dessus) mais n'est branché sur aucune vraie base encore : il reste à
-  provisionner un projet Supabase, y appliquer
-  `supabase/migrations/202609020001_init.sql`, et définir `DATABASE_URL`
-  sur Render. Tant que ce n'est pas fait, toutes les données disparaissent
-  à chaque redémarrage du backend (fréquent sur le plan gratuit Render,
-  qui s'endort après une période d'inactivité).
+- ~~Base de données réelle~~ — fait : projet Supabase provisionné, migration
+  appliquée, `DATABASE_URL` branché sur Render via le **connection pooler**
+  (le host "Direct connection" de Supabase est IPv6-only, incompatible avec
+  la sortie IPv4 du plan gratuit Render — utiliser le pooler en session
+  mode). Les données survivent maintenant aux redémarrages du backend.
 - **Stockage de photos réel** — les photos téléversées atterrissent sur le
   disque local du serveur (`backend/uploads/`, ignoré par git), servies
   directement par FastAPI. Ça fonctionne, mais sur un hébergeur gratuit
   comme Render le disque n'est pas garanti persistant : une photo peut
   disparaître après un redéploiement ou un redémarrage à froid — même mise
-  en garde que le SQLite de Valet Signature. À remplacer par un vrai bucket
-  (Supabase Storage ou équivalent) une fois la base en place.
+  en garde que le SQLite de Valet Signature. La base Supabase étant
+  maintenant en place, la suite logique est Supabase Storage.
 - **Courriels réels** — les invitations (personnel et parents) génèrent un
   lien à copier-coller manuellement, aucun courriel n'est envoyé.
 - **Polish visuel et RTL** — l'essentiel fonctionne (testé visuellement en
@@ -121,4 +119,7 @@ entièrement contre le store en mémoire — aucune base réelle requise.
   `sanad-app-dz` séparé — aucune ressource partagée avec Fidelio)
 - Backend : https://sanad-api-pvla.onrender.com (Render, plan gratuit —
   s'endort après une période d'inactivité, premier appel plus lent)
+- Base de données : Supabase (projet `sanad`, région Paris/eu-west-3),
+  connectée via le connection pooler (voir plus haut) — `DATABASE_URL` sur
+  Render
 - Code source : github.com/SalimChikh/sanad
