@@ -881,6 +881,7 @@ function ClassroomDetail({ isOwner }: { isOwner: boolean }) {
   const [classroom, setClassroom] = useState<Classroom | null>(null);
   const [children, setChildren] = useState<Child[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<StaffInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [error, setError] = useState("");
@@ -892,11 +893,12 @@ function ClassroomDetail({ isOwner }: { isOwner: boolean }) {
       const [c, kids, staffResult] = await Promise.all([
         request<Classroom>(`/classrooms/${classroomId}`),
         request<Child[]>(`/children?classroom_id=${classroomId}`),
-        request<{ members: StaffMember[] }>("/staff"),
+        request<{ members: StaffMember[]; invites: StaffInvite[] }>("/staff"),
       ]);
       setClassroom(c);
       setChildren(kids);
       setStaff(staffResult.members.filter((m) => m.role === "educator"));
+      setPendingInvites(staffResult.invites.filter((i) => (i.classroom_ids ?? []).includes(classroomId!)));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -997,6 +999,20 @@ function ClassroomDetail({ isOwner }: { isOwner: boolean }) {
         })}
         {!staff.length && <p className="empty">{t("Aucun éducateur/trice pour l’instant.")}</p>}
       </div>
+
+      {pendingInvites.length > 0 && (
+        <>
+          <h3>{t("Invitations en attente pour cette classe")}</h3>
+          <div className="cards-grid">
+            {pendingInvites.map((i) => (
+              <div className="panel" key={i.id}>
+                <strong>{i.email}</strong>
+                <p className="empty small">{t("En attente d’activation du compte")}</p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1243,6 +1259,8 @@ function TeamPage() {
   const [classroomIds, setClassroomIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [justCreatedId, setJustCreatedId] = useState("");
+  const [copiedId, setCopiedId] = useState("");
   const load = () => request<{ members: StaffMember[]; invites: StaffInvite[] }>("/staff").then((r) => { setMembers(r.members); setInvites(r.invites); });
   useEffect(() => {
     void load();
@@ -1258,6 +1276,21 @@ function TeamPage() {
     setClassroomIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
   }
 
+  function inviteLink(token: string): string {
+    return `${window.location.origin}/staff-invite/${token}`;
+  }
+
+  function copyLink(invite: StaffInvite) {
+    navigator.clipboard.writeText(inviteLink(invite.token));
+    setCopiedId(invite.id);
+    setTimeout(() => setCopiedId(""), 2000);
+  }
+
+  async function cancelInvite(id: string) {
+    await request(`/staff/invites/${id}`, { method: "DELETE" });
+    void load();
+  }
+
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -1265,13 +1298,17 @@ function TeamPage() {
     const formElement = e.currentTarget;
     const data = Object.fromEntries(new FormData(formElement));
     try {
-      await request("/staff/invites", {
+      const invite = await request<StaffInvite>("/staff/invites", {
         method: "POST",
         body: JSON.stringify({ email: data.email, role: data.role, classroom_ids: role === "educator" ? classroomIds : [] }),
       });
       formElement.reset();
       setClassroomIds([]);
       setRole("educator");
+      // The invite is useless to the new teacher until this link actually
+      // reaches them — nothing sends it automatically (no email yet), so
+      // show it immediately instead of just silently adding a pending row.
+      setJustCreatedId(invite.id);
       void load();
     } catch (e) {
       setError((e as Error).message);
@@ -1322,9 +1359,19 @@ function TeamPage() {
           <h3>{t("Invitations en attente")}</h3>
           <div className="cards-grid">
             {invites.map((i) => (
-              <div className="panel" key={i.id}>
+              <div className={`panel${i.id === justCreatedId ? " invite-highlight" : ""}`} key={i.id}>
                 <strong>{i.email}</strong>
                 {i.role === "educator" && <p className="empty small">{classroomNames(i.classroom_ids) || t("Aucune classe assignée")}</p>}
+                {i.id === justCreatedId && (
+                  <p className="empty small">{t("Envoyez ce lien pour qu’il/elle active son compte :")}</p>
+                )}
+                <div className="copy-row">
+                  <code>{inviteLink(i.token)}</code>
+                  <button type="button" className="button secondary small" onClick={() => copyLink(i)}>
+                    {copiedId === i.id ? t("Lien copié ✓") : t("Copier le lien")}
+                  </button>
+                </div>
+                <button type="button" className="text-link small" onClick={() => cancelInvite(i.id)}>{t("Annuler l’invitation")}</button>
               </div>
             ))}
           </div>

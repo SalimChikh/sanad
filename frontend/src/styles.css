@@ -269,6 +269,7 @@ a.panel:hover { border-color: var(--green-light); }
 
 .copy-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
 .copy-row code { background: var(--bg); padding: 6px 10px; border-radius: 6px; flex: 1; overflow-wrap: anywhere; font-size: 0.8rem; }
+.invite-highlight { border-color: var(--green); border-width: 2px; }
 
 .event-list { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
 .event-row strong { display: block; }
