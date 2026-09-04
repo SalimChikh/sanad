@@ -293,7 +293,7 @@ function ParentShell({ member }: { member: Member & { kind: "parent" } }) {
           <Route index element={<Navigate to="children" replace />} />
           <Route path="children" element={<ParentChildren children={member.children} />} />
           <Route path="children/:childId" element={<ChildDetail canPost={false} />} />
-          <Route path="calendar" element={<CalendarPage />} />
+          <Route path="calendar" element={<CalendarPage parentChildren={member.children} />} />
         </Routes>
       </section>
     </div>
@@ -436,8 +436,15 @@ function ParentChildren({ children }: { children: Child[] }) {
 // ---------------------------------------------------------------- child detail (feed)
 
 const postTypeLabels: Record<Post["type"], string> = {
-  photo: "Photo", note: "Note", meal: "Repas", nap: "Sieste", activity: "Activité", announcement: "Annonce",
+  daily: "Résumé du jour", photo: "Photo", note: "Note", meal: "Repas", nap: "Sieste", activity: "Activité", announcement: "Annonce",
 };
+
+const moods: Array<{ value: "happy" | "calm" | "tired" | "difficult"; emoji: string; label: string }> = [
+  { value: "happy", emoji: "😊", label: "Joyeux" },
+  { value: "calm", emoji: "😌", label: "Calme" },
+  { value: "tired", emoji: "😴", label: "Fatigué" },
+  { value: "difficult", emoji: "😣", label: "Journée difficile" },
+];
 
 function ChildDetail({ canPost }: { canPost: boolean }) {
   const { t, lang } = useLang();
@@ -612,53 +619,68 @@ function ParentInvitePanel({ childId, onClose }: { childId: string; onClose: () 
   );
 }
 
+type PickedPhoto = { path: string; preview: string };
+
 export function PostComposer({ childId, onPosted }: { childId: string; onPosted: () => void }) {
   const { t } = useLang();
-  const [tab, setTab] = useState<"note" | "photo" | "meal">("note");
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  const [mood, setMood] = useState<"" | "happy" | "calm" | "tired" | "difficult">("");
+  const [mealStatus, setMealStatus] = useState<"" | "ate_all" | "ate_some" | "refused">("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [photoPath, setPhotoPath] = useState("");
-  const [photoPreview, setPhotoPreview] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
 
-  async function pickPhoto(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Show the chosen file immediately via a local object URL — no need to
-    // wait for the round-trip to the server just to confirm what was picked.
-    setPhotoPreview(URL.createObjectURL(file));
+  async function pickPhotos(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
     setError("");
     setUploading(true);
-    try {
-      const { path } = await uploadPhoto(file);
-      setPhotoPath(path);
-    } catch (e) {
-      setError((e as Error).message);
-      setPhotoPreview("");
-    } finally {
-      setUploading(false);
+    for (const file of files) {
+      // Show each pick immediately via a local object URL, then swap in
+      // the real path once the upload resolves — several photos can be
+      // in flight/failing independently rather than one blocking the rest.
+      const preview = URL.createObjectURL(file);
+      setPhotos((prev) => [...prev, { path: "", preview }]);
+      try {
+        const { path } = await uploadPhoto(file);
+        setPhotos((prev) => prev.map((p) => (p.preview === preview ? { ...p, path } : p)));
+      } catch (err) {
+        setError((err as Error).message);
+        setPhotos((prev) => prev.filter((p) => p.preview !== preview));
+      }
     }
+    setUploading(false);
+    e.target.value = "";
+  }
+
+  function removePhoto(preview: string) {
+    setPhotos((prev) => prev.filter((p) => p.preview !== preview));
   }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (tab === "photo" && !photoPath) {
-      setError(t("Choisissez une photo avant de publier."));
+    const formElement = e.currentTarget;
+    const data = Object.fromEntries(new FormData(formElement));
+    const caption = String(data.caption || "").trim();
+    if (!caption && !photos.length) {
+      setError(t("Ajoutez un résumé ou au moins une photo."));
       return;
     }
     setBusy(true);
     setError("");
-    const formElement = e.currentTarget;
-    const data = Object.fromEntries(new FormData(formElement));
     try {
-      const body: Record<string, unknown> = { child_id: childId };
-      if (tab === "note") { body.type = "note"; body.caption = data.caption; }
-      if (tab === "photo") { body.type = "photo"; body.caption = data.caption; body.media_url = photoPath; }
-      if (tab === "meal") { body.type = "meal"; body.meal_status = data.meal_status; body.caption = data.caption; }
-      await request("/posts", { method: "POST", body: JSON.stringify(body) });
+      await request("/posts", {
+        method: "POST",
+        body: JSON.stringify({
+          child_id: childId, type: "daily", caption: caption || null,
+          media_urls: photos.map((p) => p.path).filter(Boolean),
+          mood: mood || null, meal_status: mealStatus || null,
+        }),
+      });
       formElement.reset();
-      setPhotoPath("");
-      setPhotoPreview("");
+      setPhotos([]);
+      setMood("");
+      setMealStatus("");
       onPosted();
     } catch (e) {
       setError((e as Error).message);
@@ -669,36 +691,46 @@ export function PostComposer({ childId, onPosted }: { childId: string; onPosted:
 
   return (
     <form className="panel composer" onSubmit={submit}>
-      <div className="segmented">
-        <button type="button" className={tab === "note" ? "active" : ""} onClick={() => setTab("note")}>{t("Note")}</button>
-        <button type="button" className={tab === "photo" ? "active" : ""} onClick={() => setTab("photo")}><Camera size={14} /> {t("Photo")}</button>
-        <button type="button" className={tab === "meal" ? "active" : ""} onClick={() => setTab("meal")}>{t("Repas")}</button>
+      <textarea name="caption" placeholder={t("Résumé de la journée…")} />
+      <label className="photo-picker multi">
+        <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={pickPhotos} hidden />
+        <span><Camera size={20} /> {t("Ajouter des photos")}</span>
+      </label>
+      {photos.length > 0 && (
+        <div className="photo-strip">
+          {photos.map((p) => (
+            <div className="photo-thumb" key={p.preview}>
+              <img src={p.preview} alt="" />
+              {!p.path && <span className="uploading-badge small">{t("Envoi…")}</span>}
+              <button type="button" onClick={() => removePhoto(p.preview)} aria-label={t("Retirer")}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="composer-field">
+        <span className="composer-field-label">{t("Humeur")}</span>
+        <div className="segmented">
+          {moods.map((m) => (
+            <button
+              type="button" key={m.value}
+              className={mood === m.value ? "active" : ""}
+              onClick={() => setMood((prev) => (prev === m.value ? "" : m.value))}
+            >
+              {m.emoji} {t(m.label)}
+            </button>
+          ))}
+        </div>
       </div>
-      {tab === "note" && <textarea name="caption" placeholder={t("Écrire une note…")} required />}
-      {tab === "photo" && (
-        <>
-          <label className="photo-picker">
-            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickPhoto} hidden />
-            {photoPreview ? <img src={photoPreview} alt="" /> : <span><Camera size={20} /> {t("Choisir une photo")}</span>}
-            {uploading && <span className="uploading-badge">{t("Envoi…")}</span>}
-          </label>
-          <textarea name="caption" placeholder={t("Écrire une note…")} />
-        </>
-      )}
-      {tab === "meal" && (
-        <>
-          <select name="meal_status" defaultValue="ate_all">
-            <option value="ate_all">{t("A tout mangé")}</option>
-            <option value="ate_some">{t("A mangé un peu")}</option>
-            <option value="refused">{t("A refusé")}</option>
-          </select>
-          <textarea name="caption" placeholder={t("Écrire une note…")} />
-        </>
-      )}
+      <div className="composer-field">
+        <span className="composer-field-label">{t("Repas")}</span>
+        <div className="segmented">
+          <button type="button" className={mealStatus === "ate_all" ? "active" : ""} onClick={() => setMealStatus((prev) => (prev === "ate_all" ? "" : "ate_all"))}>{t("A tout mangé")}</button>
+          <button type="button" className={mealStatus === "ate_some" ? "active" : ""} onClick={() => setMealStatus((prev) => (prev === "ate_some" ? "" : "ate_some"))}>{t("A mangé un peu")}</button>
+          <button type="button" className={mealStatus === "refused" ? "active" : ""} onClick={() => setMealStatus((prev) => (prev === "refused" ? "" : "refused"))}>{t("A refusé")}</button>
+        </div>
+      </div>
       {error && <p className="error">{error}</p>}
-      <button className="button" disabled={busy || uploading}>
-        {tab === "note" ? t("Publier une note") : tab === "photo" ? t("Publier une photo") : t("Publier le repas")}
-      </button>
+      <button className="button" disabled={busy || uploading}>{t("Publier le résumé du jour")}</button>
     </form>
   );
 }
@@ -741,13 +773,23 @@ function PostCard({ post, lang }: { post: Post; lang: Lang }) {
         <span className={`badge type-${post.type}`}>{t(postTypeLabels[post.type])}</span>
         <small>{new Date(post.created_at).toLocaleString(locale)}</small>
       </div>
+      {post.mood && (
+        <p className="mood-line">
+          {moods.find((m) => m.value === post.mood)?.emoji} {t(moods.find((m) => m.value === post.mood)?.label ?? "")}
+        </p>
+      )}
+      {post.caption && <p>{post.caption}</p>}
+      {post.media_urls && post.media_urls.length > 0 && (
+        <div className="post-photo-grid">
+          {post.media_urls.map((url) => <img key={url} className="post-photo" src={mediaUrl(url)} alt="" />)}
+        </div>
+      )}
       {post.media_url && <img className="post-photo" src={mediaUrl(post.media_url)} alt="" />}
       {post.meal_status && (
         <p className="meal-status">
           {post.meal_status === "ate_all" ? t("A tout mangé") : post.meal_status === "ate_some" ? t("A mangé un peu") : t("A refusé")}
         </p>
       )}
-      {post.caption && <p>{post.caption}</p>}
       <small className="post-author">{post.author_name}</small>
       <button type="button" className="text-link comments-toggle" onClick={toggle}>
         <MessageCircle size={14} /> {comments.length || ""}
@@ -840,16 +882,31 @@ export function buildMonthGrid(monthCursor: Date): Date[] {
   });
 }
 
-export function CalendarPage() {
+export function CalendarPage({ parentChildren }: { parentChildren?: Child[] } = {}) {
   const { t, lang } = useLang();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [postsByChild, setPostsByChild] = useState<Record<string, Post[]>>({});
   const [monthCursor, setMonthCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => new Date());
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const locale = lang === "ar" ? "ar-DZ" : lang === "en" ? "en-CA" : "fr-CA";
-  const load = () => request<CalendarEvent[]>("/calendar-events").then(setEvents);
+  const load = () => request<CalendarEvent[]>("/calendar-events").then(setEvents).finally(() => setEventsLoading(false));
   useEffect(() => { void load(); }, []);
+
+  // A parent's calendar also surfaces that day's communications (photos,
+  // notes, meals…) for each of their children — not just institution
+  // events — since "what happened today" is really what a parent wants
+  // when they click a day, not a bare events list.
+  useEffect(() => {
+    if (!parentChildren?.length) return;
+    for (const child of parentChildren) {
+      request<Post[]>(`/feed?child_id=${child.id}`).then((posts) => {
+        setPostsByChild((prev) => ({ ...prev, [child.id]: posts }));
+      });
+    }
+  }, [parentChildren]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -863,6 +920,10 @@ export function CalendarPage() {
   const today = new Date();
   const days = useMemo(() => buildMonthGrid(monthCursor), [monthCursor]);
   const selectedEvents = (eventsByDay.get(dayKey(selected)) ?? []).slice().sort((a, b) => a.start_at.localeCompare(b.start_at));
+  const selectedPostsByChild = (parentChildren ?? []).map((child) => ({
+    child,
+    posts: (postsByChild[child.id] ?? []).filter((post) => dayKey(new Date(post.created_at)) === dayKey(selected)),
+  })).filter((entry) => entry.posts.length > 0);
 
   function changeMonth(delta: number) {
     setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
@@ -911,7 +972,9 @@ export function CalendarPage() {
     <div className="page">
       <div className="page-head">
         <h1>{t("Calendrier")}</h1>
-        <button type="button" className="button" onClick={() => setShowForm((v) => !v)}>{t("Nouvel événement")}</button>
+        {!parentChildren && (
+          <button type="button" className="button" onClick={() => setShowForm((v) => !v)}>{t("Nouvel événement")}</button>
+        )}
       </div>
 
       <div className="calendar-toolbar">
@@ -966,17 +1029,28 @@ export function CalendarPage() {
         <h2 className="calendar-selected-label">
           {selected.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" })}
         </h2>
-        {selectedEvents.map((event) => (
+        {eventsLoading && <p className="empty">{t("Chargement…")}</p>}
+        {!eventsLoading && selectedEvents.map((event) => (
           <div className="panel event-row" key={event.id}>
             <div className="event-row-head">
               <strong>{event.title}</strong>
-              <button type="button" className="text-link" onClick={() => remove(event.id)}>{t("Supprimer")}</button>
+              {!parentChildren && <button type="button" className="text-link" onClick={() => remove(event.id)}>{t("Supprimer")}</button>}
             </div>
             <small>{event.all_day ? t("Toute la journée") : new Date(event.start_at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</small>
             {event.description && <p>{event.description}</p>}
           </div>
         ))}
-        {!selectedEvents.length && <p className="empty">{t("Aucun événement ce jour.")}</p>}
+        {!eventsLoading && !selectedEvents.length && !parentChildren && <p className="empty">{t("Aucun événement ce jour.")}</p>}
+
+        {selectedPostsByChild.map(({ child, posts }) => (
+          <div className="calendar-day-child-feed" key={child.id}>
+            {parentChildren && parentChildren.length > 1 && <h3 className="calendar-day-child-name">{child.first_name}</h3>}
+            {posts.map((post) => <PostCard key={post.id} post={post} lang={lang} />)}
+          </div>
+        ))}
+        {parentChildren && !eventsLoading && !selectedEvents.length && !selectedPostsByChild.length && (
+          <p className="empty">{t("Aucune communication ce jour.")}</p>
+        )}
       </div>
     </div>
   );

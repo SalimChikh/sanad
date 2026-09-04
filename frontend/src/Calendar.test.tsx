@@ -100,4 +100,23 @@ describe("CalendarPage", () => {
     const deleteCall = vi.mocked(api.request).mock.calls.find(([, opts]) => opts?.method === "DELETE");
     expect(deleteCall?.[0]).toBe("/calendar-events/e-to-delete");
   });
+
+  it("for a parent, shows today's posts for their child under the selected day, and hides the event-creation controls", async () => {
+    const today = new Date();
+    const child = { id: "child-1", institution_id: "i1", first_name: "Amine", last_name: "Test", active: true } as const;
+    vi.mocked(api.request).mockImplementation((path: string) => {
+      if (path === "/calendar-events") return Promise.resolve([]);
+      if (path === "/feed?child_id=child-1") {
+        return Promise.resolve([
+          { id: "p1", author_user_id: "u1", author_name: "Prof", type: "daily", caption: "Belle journée !", created_at: today.toISOString() },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<LanguageProvider><CalendarPage parentChildren={[child as never]} /></LanguageProvider>);
+
+    expect(await screen.findByText("Belle journée !")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nouvel événement" })).not.toBeInTheDocument();
+  });
 });

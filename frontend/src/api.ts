@@ -101,9 +101,11 @@ export type Post = {
   classroom_id?: string;
   author_user_id: string;
   author_name: string;
-  type: "photo" | "note" | "meal" | "nap" | "activity" | "announcement";
+  type: "daily" | "photo" | "note" | "meal" | "nap" | "activity" | "announcement";
   caption?: string;
   media_url?: string;
+  media_urls?: string[];
+  mood?: "happy" | "calm" | "tired" | "difficult";
   meal_status?: "ate_all" | "ate_some" | "refused";
   created_at: string;
 };
